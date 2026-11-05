@@ -1,0 +1,4 @@
+#!/bin/sh
+# Atualiza o grafo (AST, sem custo) a cada push. Nunca bloqueia o push.
+command -v graphify >/dev/null 2>&1 && graphify update . >/dev/null 2>&1
+exit 0

@@ -1,0 +1,116 @@
+@import "tailwindcss";
+
+/*
+ * Tokens semânticos. Os valores são um ponto de partida: a paleta final vem do sentimento
+ * do produto (PRODUCT.md), pela psicologia das cores, em tons pastel (docs/arquitetura.md §5.1).
+ * A justificativa da paleta fica em DESIGN.md.
+ * Light é o tema padrão, em `:root` (docs/arquitetura.md §5.1); dark em `.dark`.
+ */
+
+:root {
+  --radius: 0.375rem;
+
+  --background: #f4f1e8;
+  --foreground: #16231f;
+  --card: #faf8f1;
+  --card-foreground: #16231f;
+  --popover: #faf8f1;
+  --popover-foreground: #16231f;
+  --primary: #0d3b36;
+  --primary-foreground: #f4f1e8;
+  --secondary: #e7e0cc;
+  --secondary-foreground: #16231f;
+  --muted: #eae5d6;
+  --muted-foreground: #6b6555;
+  --accent: #e3ece9;
+  --accent-foreground: #0d3b36;
+  --destructive: #7a2b2b;
+  --destructive-foreground: #f4f1e8;
+  --success: #96742f;
+  --success-foreground: #2a1f0c;
+  --border: #ddd6c0;
+  --input: #857d66;
+  --ring: #0d3b36;
+  --overlay: #16231f8c;
+}
+
+.dark {
+  /* Dark — "grafite": neutros no mesmo matiz quente do papel da
+   * light (~47°, contra 45° da light) só que quase sem saturação (~7%, contra
+   * os 15-16% da primeira tentativa, que lia verde-carvão pesado demais).
+   * Ver DESIGN.md, seção Tokens, para o porquê e os contrastes AA verificados. */
+  --background: #23221f;
+  --foreground: #ece7d8;
+  --card: #2c2a26;
+  --card-foreground: #ece7d8;
+  --popover: #2c2a26;
+  --popover-foreground: #ece7d8;
+  --primary: #54a292;
+  --primary-foreground: #0a1613;
+  --secondary: #31302b;
+  --secondary-foreground: #ece7d8;
+  --muted: #292824;
+  --muted-foreground: #a6b3ab;
+  --accent: #37352f;
+  --accent-foreground: #d7ece6;
+  --destructive: #e0968c;
+  --destructive-foreground: #2a0f0c;
+  --success: #d9bd7c;
+  --success-foreground: #2a1f0c;
+  --border: #47453e;
+  --input: #7a7765;
+  --ring: #54a292;
+  /* Véu atrás de diálogos: tinta do tema, não preto puro. */
+  --overlay: #0f0e0cb3;
+}
+
+@theme inline {
+  --font-sans: var(--font-roboto);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-overlay: var(--overlay);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+::selection {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+* {
+  scrollbar-color: var(--border) transparent;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--primary);
+}

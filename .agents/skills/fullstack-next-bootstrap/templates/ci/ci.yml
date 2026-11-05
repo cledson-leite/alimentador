@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, homolog, main]
+  push:
+    branches: [develop, homolog, main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  qualidade:
+    name: Lint, naming, deps, types, format, unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+
+      - run: yarn install --frozen-lockfile
+
+      - run: yarn lint
+      - run: yarn check:naming
+      - run: yarn check:deps
+
+      - name: Gera os tipos ambient do Next.js (LayoutProps etc.) antes do typecheck
+        run: yarn next typegen
+
+      - run: yarn tsc --noEmit
+      - run: yarn format:check
+      - run: yarn test
+
+  build:
+    name: Build de produção
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+
+      - run: yarn install --frozen-lockfile
+
+      # env.ts só exige formato válido (URL + chave não vazia) pra passar no Zod;
+      # `next build` não precisa de um Supabase real de pé, só compilar.
+      - name: Build de produção
+        run: yarn build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: build-placeholder-key
+          SUPABASE_SERVICE_ROLE_KEY: build-placeholder-key
+
+  integracao-e2e:
+    name: Integração + E2E (Supabase local)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+
+      - run: yarn install --frozen-lockfile
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Sobe o Supabase local (migrations + seed)
+        run: supabase start
+
+      - name: Exporta URL e chave do Supabase local pro ambiente do job
+        # `supabase status -o env` sai como KEY="valor" (aspas literais), que o
+        # $GITHUB_ENV não remove — a URL vira "http://..." com aspas incluídas
+        # e o createClient rejeita como inválida. `-o json` + jq evita isso.
+        run: |
+          echo "NEXT_PUBLIC_SUPABASE_URL=$(supabase status -o json | jq -r '.API_URL')" >> "$GITHUB_ENV"
+          echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$(supabase status -o json | jq -r '.ANON_KEY')" >> "$GITHUB_ENV"
+          echo "SUPABASE_SERVICE_ROLE_KEY=$(supabase status -o json | jq -r '.SERVICE_ROLE_KEY')" >> "$GITHUB_ENV"
+
+      - run: yarn test:int
+
+      - name: Reseta o Supabase local (migrations + seed) antes do E2E
+        # test:int persiste registros reais no banco (ex.: SupabaseRegistroAcaoRepository
+        # salva `acao: "usuario.criar"`/"cliente.editar" sem limpeza). Sem reset aqui, o
+        # E2E roda sobre estado sujo e getByText exato bate 2+ elementos com o mesmo texto
+        # do seed. Mesma disciplina já usada localmente (docs/testes.md).
+        run: supabase db reset
+
+      - name: Instala os browsers do Playwright
+        run: npx playwright install --with-deps chromium
+
+      - run: yarn test:e2e
+
+      - name: Guarda trace e capturas das falhas do E2E
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-results
+          path: test-results/
+          if-no-files-found: ignore
+
+      - name: Encerra o Supabase local
+        if: always()
+        run: supabase stop

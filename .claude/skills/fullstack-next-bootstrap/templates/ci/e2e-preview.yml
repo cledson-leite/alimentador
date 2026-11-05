@@ -1,0 +1,140 @@
+name: E2E Preview
+
+on:
+  deployment_status:
+
+permissions:
+  contents: read
+  statuses: write
+
+# Roda só quando a `homolog` recebe um merge: suíte COMPLETA contra o preview da Vercel e o Supabase
+# de homologação. O `ref` do deployment criado pela Vercel é o SHA (payload vazio), então a branch é
+# descoberta no job `ramo`. As rodadas dividem o mesmo banco de homologação: entram em fila, nunca em paralelo.
+concurrency:
+  group: e2e-preview-banco-de-homologacao
+  cancel-in-progress: false
+
+jobs:
+  ramo:
+    name: Descobre a branch do deploy
+    if: >
+      vars.E2E_PREVIEW_HABILITADO == 'true' &&
+      github.event.deployment_status.state == 'success' &&
+      startsWith(github.event.deployment.environment, 'Preview')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      alvo: ${{ steps.ramo.outputs.alvo }}
+    steps:
+      - id: ramo
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RAMOS=$(gh api "repos/${{ github.repository }}/commits/${{ github.event.deployment.sha }}/branches-where-head" --jq '.[].name')
+          echo "branches com esse commit na ponta: $RAMOS"
+          if echo "$RAMOS" | grep -qx homolog; then ALVO=homolog; else ALVO=; fi
+          echo "alvo=$ALVO" >> "$GITHUB_OUTPUT"
+
+  e2e-preview:
+    name: E2E no preview da Vercel
+    needs: ramo
+    # Devolutiva técnica PR #71, ponto 3: a suíte cria Clientes e usuários e altera cadastros, então
+    # só roda contra Supabase de preview/homolog isolado e descartável (docs/testes.md, seção 5).
+    # Desligado até essa prova existir: defina a variável de repositório E2E_PREVIEW_HABILITADO=true
+    # (Settings > Secrets and variables > Actions > Variables) depois de conferir as variáveis do
+    # Supabase nos ambientes Preview e Homolog da Vercel.
+    if: needs.ramo.outputs.alvo != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SHA: ${{ github.event.deployment.sha }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Marca o commit como pendente
+        run: |
+          gh api "repos/${{ github.repository }}/statuses/$SHA" \
+            -f state=pending -f context="E2E Preview" \
+            -f description="E2E rodando contra o preview" \
+            -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.deployment.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+
+      - run: yarn install --frozen-lockfile
+      - run: npx playwright install --with-deps chromium
+
+      # docs/testes.md §5.6: a suíte completa começa do seed, com o banco de homologação restaurado.
+      # Só contra o projeto cujo ref está em SUPABASE_HOMOLOG_PROJECT_REF — o
+      # reset apaga TUDO desse projeto, então ele nunca pode ser o de produção.
+      - name: Restaura o Supabase de homologação (migrations + seed)
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_HOMOLOG_DB_PASSWORD }}
+          PROJECT_REF: ${{ vars.SUPABASE_HOMOLOG_PROJECT_REF }}
+        run: |
+          test -n "$PROJECT_REF" || { echo "SUPABASE_HOMOLOG_PROJECT_REF não definida"; exit 1; }
+          npx --yes supabase@latest link --project-ref "$PROJECT_REF"
+          npx --yes supabase@latest db reset --linked --yes
+
+      # Os e2e que preparam dados falam direto com o banco do preview: só aceitam o
+      # Supabase local ou este projeto de homologação (test-support/exigir-supabase-local.ts).
+      - name: Obtém URL e chaves do Supabase de homologação
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          PROJECT_REF: ${{ vars.SUPABASE_HOMOLOG_PROJECT_REF }}
+        run: |
+          test -n "$PROJECT_REF" || { echo "SUPABASE_HOMOLOG_PROJECT_REF não definida"; exit 1; }
+          CHAVES=$(npx --yes supabase@latest projects api-keys --project-ref "$PROJECT_REF" -o json)
+          ANON=$(echo "$CHAVES" | jq -r '.[] | select(.name=="anon") | .api_key')
+          SERVICE=$(echo "$CHAVES" | jq -r '.[] | select(.name=="service_role") | .api_key')
+          test -n "$ANON" && test -n "$SERVICE" || { echo "chaves não encontradas"; exit 1; }
+          echo "::add-mask::$ANON"
+          echo "::add-mask::$SERVICE"
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=https://$PROJECT_REF.supabase.co"
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE"
+            echo "SUPABASE_HOMOLOG_PROJECT_REF=$PROJECT_REF"
+          } >> "$GITHUB_ENV"
+
+      # Sem isso, um preview morto (404) ou barrado pela Deployment Protection faz a suíte inteira
+      # estourar o timeout um a um (~30 min) em vez de falhar na hora.
+      - name: Confere que o preview responde
+        env:
+          BASE_URL: ${{ github.event.deployment_status.environment_url }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: |
+          CODIGO=$(curl -s -o /dev/null -m 30 -w '%{http_code}'             -H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET" "$BASE_URL/login")
+          echo "$BASE_URL/login -> HTTP $CODIGO"
+          test "$CODIGO" = 200 || { echo "::error::preview fora do ar ou protegido (esperado 200, veio $CODIGO)"; exit 1; }
+
+      - name: Playwright contra o preview
+        run: yarn test:e2e
+        env:
+          BASE_URL: ${{ github.event.deployment_status.environment_url }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          # Segredos extras que a suíte do projeto precise (assinatura de webhook, adapters falsos) entram aqui.
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report-homolog
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
+      - name: Publica o resultado no commit
+        if: always()
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then STATE=success; else STATE=failure; fi
+          gh api "repos/${{ github.repository }}/statuses/$SHA" \
+            -f state=$STATE -f context="E2E Preview" \
+            -f description="E2E no preview: $STATE" \
+            -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
