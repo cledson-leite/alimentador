@@ -10,6 +10,8 @@ export function cnpjsDoTexto(texto: string): string[] {
 /** Nome entre aspas no corpo ("NOME LTDA", com sede...), que é como os contratos reais o escrevem. */
 const NOME_ENTRE_ASPAS = /[“"]([^”"\n]{3,120}?\s(?:LTDA|EIRELI|S\/A|S\.A\.|EPP|ME|SS|MEI))\.?[”"]/i;
 
+/** "adotará como nome empresarial: X LTDA", quando o contrato abre pela qualificação dos sócios. */
+const NOME_EMPRESARIAL_DECLARADO = /nome empresarial:?\s+([^,\n]+?\s(?:LTDA|EIRELI|S\/A|S\.A\.|EPP|ME|SS|MEI))\b/i;
 /** Linha que é só o nome (termina na forma societária), como logo abaixo do título da alteração. */
 const LINHA_DE_NOME = /^(.{3,120}?\s(?:LTDA|EIRELI|S\/A|S\.A\.|EPP|ME|SS|MEI))\.?$/i;
 /** Empresário individual: nome completo seguido do CPF (11 dígitos), sem forma societária. */
@@ -18,7 +20,12 @@ const NOME_E_CPF = /(?:^|-\s*)([A-ZÀ-Ú][A-ZÀ-Ú ]{5,80}?)\s+\d{11}\b/;
 export function nomeEmpresarial(texto: string): string | null {
   const entreAspas = texto.match(NOME_ENTRE_ASPAS)?.[1]?.trim();
   if (entreAspas) return entreAspas;
+  const declarado = texto.match(NOME_EMPRESARIAL_DECLARADO)?.[1]?.trim();
+  if (declarado) return declarado;
   const inicio = texto.split("\n").map((l) => l.trim()).filter(Boolean).slice(0, 6);
+  const eiTitulo = inicio.findIndex((l) => /EMPRES[AÁ]RIO INDIVIDUAL/i.test(l));
+  const abaixoDoTitulo = eiTitulo >= 0 && eiTitulo < 3 ? inicio[eiTitulo + 1] : undefined;
+  if (abaixoDoTitulo && abaixoDoTitulo.length <= 80 && !/\d|CNPJ|NIRE/i.test(abaixoDoTitulo)) return abaixoDoTitulo;
   const naLinha = inicio.map((l) => (/ALTERA|CONTRAT|CONSOLIDA/i.test(l) ? null : l.match(LINHA_DE_NOME)?.[1])).find(Boolean);
   if (naLinha) return naLinha.trim();
   if (/EMPRES[AÁ]RI[OA]/i.test(inicio.slice(0, 4).join(" "))) {

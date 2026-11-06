@@ -525,6 +525,33 @@ describe("executarImportacao", () => {
       expect(r.carregadas.map((x) => x.empresa)).toEqual(["LEONARDO DALMINA SILVA"]);
     });
 
+    it("lê o nome do empresário individual na linha logo abaixo do título, antes do CNPJ", async () => {
+      const texto = [
+        "ALTERAÇÃO DO INSTRUMENTO DE INSCRIÇÃO DE EMPRESÁRIO INDIVIDUAL",
+        "F SHIRO SAITO DISTRIBUIDORA",
+        `CNPJ: ${formatarCnpj(CNPJ)}`,
+        "Cascavel/PR, 20 de junho de 2025.",
+      ].join("\n");
+
+      const { r } = await carregaCom([arquivo("a1", "1 alteracao.pdf", texto)], "F SHIRO SAITO DISTRIBUIDORA");
+
+      expect(r.falhas).toEqual([]);
+      expect(r.carregadas.map((x) => x.empresa)).toEqual(["F SHIRO SAITO DISTRIBUIDORA"]);
+    });
+
+    it("lê o nome em 'adotará como nome empresarial: X LTDA' quando o contrato começa pelos sócios", async () => {
+      const texto = [
+        "Pelo presente instrumento particular de Contrato Social:",
+        "EDUARDA SCHRODER, brasileira, solteira, empresária, residente em Marechal Cândido Rondon - PR",
+        `A sociedade adotará como nome empresarial: ${N}, e usará a expressão ACME como nome fantasia, CNPJ ${formatarCnpj(CNPJ)}.`,
+      ].join("\n");
+
+      const { r } = await carregaCom([arquivo("a1", "contrato social.pdf", texto)]);
+
+      expect(r.falhas).toEqual([]);
+      expect(r.carregadas.map((x) => x.empresa)).toEqual([N]);
+    });
+
     it.each([
       ["página de portal", "Alteração\nMatriz\nSolicitação concluída com sucesso!"],
       ["e-mail", "Bom dia. Preciso de uma atualização de dados\nPrezado(a), A Jucesp adota os procedimentos"],
