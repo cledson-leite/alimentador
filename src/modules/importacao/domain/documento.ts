@@ -68,14 +68,17 @@ function classificar(texto: string): Classificacao {
   const janela = todas.slice(0, JANELA);
   // O título pode quebrar em até 3 linhas ("ALTERAÇÃO POR TRANSFORMAÇÃO / DO INSTRUMENTO DE..."), mas a junção só vale
   // se começar numa linha que abre com ordinal ou "ALTERAÇÃO"; "Evento: Alteração contratual" não é título.
+  // Título nas 3 primeiras linhas vale direto. Mais abaixo (atrás do carimbo da Junta) só vale em instrumento, isto é,
+  // com cláusulas: o protocolo da Junta lista eventos como "ALTERAÇÃO/CONSOLIDAÇÃO DE CONTRATO/ESTATUTO" sem ser um.
+  const temClausulas = /\bCLAUSULAS?\b/.test(todas.join(" "));
   const iAlteracao = janela.findIndex((_, i) => TITULO_DE_ALTERACAO.test(todas.slice(i, i + 3).join(" ")));
-  if (iAlteracao >= 0) return resultado("alteracao", iAlteracao);
+  if (iAlteracao >= 0 && (iAlteracao < 3 || temClausulas)) return resultado("alteracao", iAlteracao);
   // CLÁUSULA separa instrumento de verdade de página de portal, e-mail ou manual que só citam "alteração".
   const topo = todas.slice(0, 8).join(" ");
   if (/\bCLAUSULA\b/.test(todas.join(" ")) && /MOTIVOS:|CONSOLIDACAO CONTRATUAL|\bALTERACAO\b/.test(topo)) return resultado("alteracao");
 
   const iContrato = janela.findIndex((l) => TITULO_DE_CONTRATO.test(l));
-  if (iContrato >= 0) return resultado("contrato", iContrato);
+  if (iContrato >= 0 && (iContrato < 3 || temClausulas)) return resultado("contrato", iContrato);
   // Constituição sem título: abre pela qualificação dos sócios e declara a denominação na CLÁUSULA PRIMEIRA.
   if (/CLAUSULA PRIMEIRA.*(DENOMINACAO EMPRESARIAL|NOME EMPRESARIAL)/.test(topo)) return resultado("contrato");
   // Toda alteração traz "alteração contratual" ou equivalente no texto (sem acento, plural, "do contrato social").

@@ -621,6 +621,7 @@ describe("executarImportacao", () => {
         "OITAVA ALTERAÇÃO CONTRATUAL DA SOCIEDADE EMPRESÁRIA LIMITADA",
         N,
         `CNPJ: ${formatarCnpj(CNPJ)}`,
+        "CLÁUSULA PRIMEIRA: Fica alterado o endereço da sociedade.",
         "Cascavel/PR, 20 de fevereiro de 2026.",
       ].join("\n");
 
@@ -666,6 +667,19 @@ describe("executarImportacao", () => {
 
     it.each([
       ["protocolo da Junta", "Secretaria da Micro e Pequena Empresa\nProtocolo 241234567\nEvento: Alteração contratual\nSituação: em análise"],
+      [
+        "protocolo da Junta com lista de eventos (checkboxes)",
+        [
+          "123456789 12345678901 123-4",
+          "Secretaria da Micro e Pequena Empresa",
+          "Secretaria da Racionalização e Simplificação",
+          ...Array.from({ length: 20 }, (_, i) => `Campo ${i + 1}: valor`),
+          "001 002 3 ALTERAÇÃO/ALTERACAO DE DADOS (EXCETO NOME",
+          "004 005 6 ALTERAÇÃO/CONSOLIDAÇÃO DE",
+          "CONTRATO/ESTATUTO",
+          "007 Alteração de capital social e/ou Quadro Societário",
+        ].join("\n"),
+      ],
       ["pedido de alteração cadastral", "Cadastro de Contribuintes - Comprovante do Pedido\nNatureza do Pedido: Alteração contratual de Inscrição Estadual"],
       ["orientação interna", "Alterações para rodar em 03/2026\n* Alteração contratual - VIA BR INFORMATICA LTDA\nAlterar razão social para: ACME LTDA"],
     ])("ignora %s que cita 'alteração contratual' mas não é o instrumento, sem bloquear a empresa", async (_caso, texto) => {
