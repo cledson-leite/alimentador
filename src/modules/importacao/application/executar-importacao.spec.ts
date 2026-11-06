@@ -314,4 +314,96 @@ describe("executarImportacao", () => {
     expect(r.carregadas).toHaveLength(1);
     expect(c.removidos).toEqual([]);
   });
+
+  describe("casamento do nome da lista com a pasta do Drive", () => {
+    const casa = async (nomeLista: string, nomePasta: string) => {
+      const c = montar({
+        lista: [{ nome: nomeLista, cnpj: CNPJ }],
+        sn: [CNPJ],
+        pastas: [{ nome: nomePasta, arquivos: [arquivo("a1", "cs.pdf", textoContrato(nomeLista, CNPJ))] }],
+      });
+      return executarImportacao(c.portas, {});
+    };
+
+    it.each([
+      ["passo 1, nome exato sem diferença de caixa e acento", "AÇAÍ COMERCIO LTDA", "acai comercio ltda"],
+      ["passo 2, pasta cortada no hífen", "ACME COMERCIO LTDA", "ACME COMERCIO LTDA - empresa"],
+      ["passo 3, nome da lista dentro da pasta", "ACME COMERCIO LTDA", "ACME COMERCIO LTDA inicia na Rigoni em 22/01/2026"],
+      ["passo 4, ignorando pontuação e & = E", "ACME COMERCIO & CIA LTDA", "ACME, COMERCIO E CIA. LTDA"],
+      ["passo 5, sem a forma jurídica", "ACME COMERCIO LTDA", "ACME COMERCIO EIRELI"],
+      ["passo 6, espaço entre letras e CNPJ no fim da pasta", "AF VAZ NETO LTDA", "A F VAZ NETO LTDA 03.468"],
+      ["passo 7, palavras na mesma ordem com palavras a mais", "PRIVILEGE HOME RESORT SPE LTDA", "PRIVILEGE HOME RESORT EMPREENDIMENTO SPE LTDA"],
+    ])("casa: %s", async (_caso, lista, pasta) => {
+      const r = await casa(lista, pasta);
+      expect(r.falhas).toEqual([]);
+      expect(r.carregadas).toHaveLength(1);
+    });
+
+    it.each([
+      ["palavras em outra ordem", "ALS COMERCIO E SERVICOS LTDA", "ALS SERVICOS E COMERCIO LTDA"],
+      ["abreviação", "ACME INTERNACIONAL LTDA", "ACME INT LTDA"],
+      ["erro de digitação", "TEIXEIRA COMERCIO LTDA", "TEXEIRA COMERCIO LTDA"],
+    ])("não casa por aproximação: %s", async (_caso, lista, pasta) => {
+      const r = await casa(lista, pasta);
+      expect(r.carregadas).toEqual([]);
+      expect(r.falhas[0]).toMatchObject({ etapa: "pasta", motivo: "pasta não encontrada" });
+    });
+
+    it("manda para falhas quando duas pastas casam no mesmo passo", async () => {
+      const c = montar({
+        lista: [{ nome: "ACME COMERCIO LTDA", cnpj: CNPJ }],
+        sn: [CNPJ],
+        pastas: [
+          { nome: "ACME COMERCIO LTDA - empresa A", arquivos: [] },
+          { nome: "ACME COMERCIO LTDA - empresa B", arquivos: [] },
+        ],
+      });
+
+      const r = await executarImportacao(c.portas, {});
+
+      expect(r.falhas).toEqual([
+        { cnpj: CNPJ, nome: "ACME COMERCIO LTDA", etapa: "pasta", motivo: "várias pastas" },
+      ]);
+    });
+  });
+
+  describe("pasta compartilhada por mais de uma linha da lista", () => {
+    const FILIAL = cnpjValido("112223330002");
+    const OUTRA_RAIZ = cnpjValido("998887770001");
+
+    it("cria um cliente por CNPJ para matriz e filial, cada um com a cópia dos documentos", async () => {
+      const c = montar({
+        lista: [
+          { nome: N, cnpj: CNPJ },
+          { nome: N, cnpj: FILIAL },
+        ],
+        sn: [CNPJ, FILIAL],
+        pastas: [{ nome: N, arquivos: [arquivo("a1", "contrato social.pdf", textoContrato(N, CNPJ))] }],
+      });
+
+      const r = await executarImportacao(c.portas, {});
+
+      expect(r.carregadas.map((x) => x.cnpj)).toEqual([CNPJ, FILIAL]);
+      expect(c.enviados.map((e) => e.caminho)).toHaveLength(2);
+      expect(new Set(c.enviados.map((e) => e.caminho)).size).toBe(2);
+    });
+
+    it("carrega só a dona da pasta quando duas empresas de raiz diferente colidem no nome", async () => {
+      const c = montar({
+        lista: [
+          { nome: N, cnpj: OUTRA_RAIZ },
+          { nome: N, cnpj: CNPJ },
+        ],
+        sn: [CNPJ, OUTRA_RAIZ],
+        pastas: [{ nome: N, arquivos: [arquivo("a1", "contrato social.pdf", textoContrato(N, CNPJ))] }],
+      });
+
+      const r = await executarImportacao(c.portas, {});
+
+      expect(r.carregadas.map((x) => x.cnpj)).toEqual([CNPJ]);
+      expect(r.falhas).toEqual([
+        { cnpj: OUTRA_RAIZ, nome: N, etapa: "cnpj", motivo: "CNPJ do documento diverge da lista" },
+      ]);
+    });
+  });
 });

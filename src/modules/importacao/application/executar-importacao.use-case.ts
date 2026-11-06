@@ -10,7 +10,7 @@ import {
   tipoDoDocumento,
 } from "../domain/documento";
 import { cnpjValido } from "../domain/cnpj";
-import { pastaPorNomeExato } from "../domain/pasta";
+import { casarPasta, type Casamento } from "../domain/pasta";
 import { resolverRegime } from "../domain/regime";
 
 import type { ArquivoDocumento, CadastroPort, DocumentosPort, LeitorPort, PlanilhasPort, Regime } from "./ports/portas";
@@ -71,7 +71,7 @@ export async function executarImportacao(portas: Portas, _opcoes: Record<string,
         resultado.puladas.push(linha.cnpj);
         continue;
       }
-      const empresa = await carregar(portas, linha.cnpj, regime, pastaPorNomeExato(linha.nome, pastas));
+      const empresa = await carregar(portas, linha.cnpj, regime, casarPasta(linha.nome, pastas));
       resultado.carregadas.push({ cnpj: linha.cnpj, empresa, regime });
     } catch (e) {
       if (!(e instanceof FalhaDeEmpresa)) throw e;
@@ -85,9 +85,11 @@ async function carregar(
   portas: Portas,
   cnpj: string,
   regime: Regime,
-  pasta: { arquivos: ArquivoDocumento[] } | undefined,
+  casamento: Casamento<{ arquivos: ArquivoDocumento[] }>,
 ): Promise<string> {
-  if (!pasta) throw new FalhaDeEmpresa("pasta", "pasta não encontrada");
+  if (casamento.tipo === "nenhuma") throw new FalhaDeEmpresa("pasta", "pasta não encontrada");
+  if (casamento.tipo === "varias") throw new FalhaDeEmpresa("pasta", "várias pastas");
+  const pasta = casamento.pasta;
 
   const lidos: Lido[] = [];
   for (const arquivo of pasta.arquivos) {
