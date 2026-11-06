@@ -22,10 +22,13 @@ export function formatarCnpj(c: string): string {
   return `${c.slice(0, 2)}.${c.slice(2, 5)}.${c.slice(5, 8)}/${c.slice(8, 12)}-${c.slice(12)}`;
 }
 
+/** Imita a forma dos contratos reais: nome no título e entre aspas curvas no corpo. */
 export function textoContrato(nome: string, cnpj?: string): string {
   return [
-    "CONTRATO SOCIAL",
-    `A sociedade girará sob o nome empresarial ${nome}${cnpj ? `, inscrita no CNPJ sob o nº ${formatarCnpj(cnpj)}` : ""}.`,
+    "CONTRATO SOCIAL DE CONSTITUIÇÃO",
+    "DE SOCIEDADE EMPRESÁRIA LIMITADA",
+    nome,
+    `“${nome}”, com sede e foro a Rua das Flores, nº 10, Cascavel/PR${cnpj ? `, inscrita no CNPJ sob o nº ${formatarCnpj(cnpj)}` : ""}.`,
   ].join("\n");
 }
 
@@ -75,9 +78,10 @@ export function montar(c: Cenario) {
 
 export function textoAlteracao(nome: string, cnpj: string | undefined, ordinal: string, dataExtenso?: string): string {
   return [
-    `${ordinal} ALTERAÇÃO DO CONTRATO SOCIAL`,
-    `A sociedade girará sob o nome empresarial ${nome}${cnpj ? `, inscrita no CNPJ sob o nº ${formatarCnpj(cnpj)}` : ""}.`,
-    ...(dataExtenso ? [`Cascavel, PR, ${dataExtenso}`] : []),
+    `${ordinal} ALTERAÇÃO DE CONTRATO SOCIAL`,
+    nome,
+    `“${nome}”, estabelecida à Rua das Flores, nº 10${cnpj ? `, inscrita no CNPJ sob o nº ${formatarCnpj(cnpj)}` : ""}.`,
+    ...(dataExtenso ? [`Cascavel, Pr., ${dataExtenso}.`] : []),
     "Assinado digitalmente",
   ].join("\n");
 }

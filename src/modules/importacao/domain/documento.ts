@@ -7,9 +7,11 @@ export function cnpjsDoTexto(texto: string): string[] {
   return [...texto.matchAll(CNPJ)].map((m) => soDigitos(m[0]));
 }
 
+/** Nome entre aspas no corpo ("NOME LTDA", com sede...), que é como os contratos reais o escrevem. */
+const NOME_ENTRE_ASPAS = /[“"]([^”"\n]{3,120}?\s(?:LTDA|EIRELI|S\/A|S\.A\.|EPP|ME|SS|MEI))\.?[”"]/i;
+
 export function nomeEmpresarial(texto: string): string | null {
-  const m = texto.match(/nome empresarial\s+([^\n,]+?\s(?:LTDA|EIRELI|S\/A|EPP|ME))\b/i);
-  return m?.[1]?.trim() ?? null;
+  return texto.match(NOME_ENTRE_ASPAS)?.[1]?.trim() ?? null;
 }
 
 const semAcento = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -47,7 +49,7 @@ export function numeroDoNome(nomeArquivo: string): number | null {
 }
 
 const MESES = ["janeiro", "fevereiro", "marco", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
-const LINHA_DATA = /^[^,]+,\s*[A-Z]{2},\s*(\d{1,2})\s*[º°]?\s*de\s+([a-zçã]+)\s+de\s+(\d{4})/i;
+const LINHA_DATA = /^[^,]+,\s*[A-Z]{2}\.?,\s*(\d{1,2})\s*[º°]?\s*de\s+([a-zçã]+)\s+de\s+(\d{4})/i;
 
 /** Datas candidatas ("Cidade, UF, dia de mês de ano") nas últimas linhas antes da assinatura digital. */
 export function datasFinais(texto: string): string[] {
