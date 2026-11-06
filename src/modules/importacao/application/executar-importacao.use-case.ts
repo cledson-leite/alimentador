@@ -23,6 +23,8 @@ export type Portas = {
   cadastro: CadastroPort;
   /** Pasta aceita por empresa no download (CNPJ → nome da pasta). Opcional. */
   pastaPorCnpj?: Map<string, string>;
+  /** Regime informado à mão para empresas sem regime nas planilhas (CNPJ → regime). Opcional. */
+  regimesManuais?: Map<string, Regime>;
 };
 
 export type Falha = { cnpj: string; nome: string; etapa: string; motivo: string };
@@ -66,7 +68,7 @@ export async function executarImportacao(portas: Portas, opcoes: OpcoesImportaca
     }
     if (vistos.has(linha.cnpj)) continue;
     vistos.add(linha.cnpj);
-    const regime = resolverRegime(linha.cnpj, sn, tributario);
+    const regime = resolverRegime(linha.cnpj, sn, tributario, portas.regimesManuais);
     if (regime === "ignorada") continue;
     if (!regime) {
       resultado.regimeAConfirmar.push({ cnpj: linha.cnpj, nome: linha.nome });

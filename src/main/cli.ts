@@ -12,6 +12,7 @@ import { leitorDeArquivos } from "../modules/importacao/infra/leitor.adapter";
 import { leitorComOcr } from "../modules/importacao/infra/ocr.adapter";
 import { planilhasXlsx } from "../modules/importacao/infra/planilhas.adapter";
 import { pastaPorCnpjDoEstado } from "../modules/importacao/infra/estado-final.parser";
+import { regimesManuaisDoCsv } from "../modules/importacao/infra/regimes-manuais.parser";
 import { escreverSaidas } from "../modules/importacao/infra/saidas.csv";
 
 import { lerOpcoes } from "./opcoes";
@@ -53,6 +54,10 @@ async function principal() {
     .filter((f) => /^_selecionados\d*\.json$/.test(f))
     .map((f) => `${op.documentos}/${f}`);
 
+  // Regime informado à mão (só vale para quem não tem regime na SN nem no tributário). Valor inválido interrompe aqui.
+  const regimesManuais = existsSync(op.regimes) ? regimesManuaisDoCsv(readFileSync(op.regimes, "utf-8")) : undefined;
+  if (regimesManuais) console.log(`Regimes manuais lidos de ${op.regimes}: ${regimesManuais.size}`);
+
   // OCR é local (Tesseract na própria máquina) e só roda onde a leitura normal não basta.
   const leitor = op.semOcr ? { ...leitorDeArquivos(), encerrar: async () => {} } : leitorComOcr(leitorDeArquivos(), { cache: op.ocrCache });
   const resultado = await executarImportacao(
@@ -62,6 +67,7 @@ async function principal() {
       leitor,
       cadastro,
       pastaPorCnpj: lerPastaPorCnpj(`${op.documentos}/_estado-final.csv`),
+      regimesManuais,
     },
     { cnpjs: op.cnpjs },
   );

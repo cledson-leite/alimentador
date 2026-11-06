@@ -1,7 +1,7 @@
 import { soDigitos } from "../domain/documento";
 
 /** CSV com ";" e aspas duplas, como o `_estado-final.csv` do download. */
-function linhasDoCsv(texto: string): string[][] {
+export function linhasDoCsv(texto: string): string[][] {
   const linhas: string[][] = [];
   let campo = "";
   let linha: string[] = [];

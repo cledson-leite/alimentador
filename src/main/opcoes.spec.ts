@@ -21,6 +21,11 @@ describe("lerOpcoes", () => {
     expect(lerOpcoes(["--sem-ocr"]).semOcr).toBe(true);
   });
 
+  it("usa por padrão o arquivo das empresas sem regime e aceita outro com --regimes", () => {
+    expect(lerOpcoes([]).regimes).toBe("C:/dados/sem-regime-prontas-para-confirmar.csv");
+    expect(lerOpcoes(["--regimes", "D:/outro.csv"]).regimes).toBe("D:/outro.csv");
+  });
+
   it("recusa flag desconhecida em vez de ignorá-la", () => {
     expect(() => lerOpcoes(["--produçao"])).toThrow();
   });

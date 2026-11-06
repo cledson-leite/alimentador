@@ -5,6 +5,7 @@ export type Opcoes = {
   producao: boolean;
   permitirApi: boolean;
   semOcr: boolean;
+  regimes: string;
   ocrCache: string;
   cnpjs: string[] | undefined;
   lista: string;
@@ -24,6 +25,7 @@ export function lerOpcoes(argv: string[]): Opcoes {
       producao: { type: "boolean", default: false },
       "permitir-api": { type: "boolean", default: false },
       "sem-ocr": { type: "boolean", default: false },
+      regimes: { type: "string", default: "C:/dados/sem-regime-prontas-para-confirmar.csv" },
       "ocr-cache": { type: "string", default: "C:/dados/ocr-cache" },
       cnpj: { type: "string" },
       lista: { type: "string", default: `${DOWNLOADS}/lista empresas(4).xlsx` },
@@ -41,6 +43,7 @@ export function lerOpcoes(argv: string[]): Opcoes {
     producao: values.producao,
     permitirApi: values["permitir-api"],
     semOcr: values["sem-ocr"],
+    regimes: values.regimes,
     ocrCache: values["ocr-cache"],
     cnpjs,
     lista: values.lista,

@@ -10,6 +10,7 @@ Spec: [`docs/specs/importador-clientes.md`](specs/importador-clientes.md) · Glo
 - O regime vem de duas planilhas: **SN** (só a aba "Patriki 102026", que é a lista atualizada) e **Tributário** (presumido e real). Quando a empresa consta nas duas, **vale o Tributário**.
 - **Só três informações contam, nas três fontes: CNPJ, nome/razão social e regime.** Qualquer outra coluna das planilhas é **ignorada** (ex.: a coluna da inscrição estadual, onde aparecia "BAIXOU": a empresa marcada assim é carregada normalmente pelo regime que a planilha traz).
 - Sem regime em nenhuma das duas: **não carrega**, vai para `regime-a-confirmar.csv`. **OUTRAS ENT.** é ignorada.
+- **Regime informado manualmente** (terceira fonte, só para quem não tem regime nas planilhas): o usuário preenche a coluna "regime" do arquivo `C:\dados\sem-regime-prontas-para-confirmar.csv` (`simples_nacional`, `lucro_presumido` ou `lucro_real`) e o importador o lê por `--regimes <arquivo>` (esse arquivo é o padrão). O regime da SN e do tributário **sempre vence** o manual. Linha em branco = continua sem regime. Valor inválido ou CNPJ malformado **interrompe a execução** com a lista das linhas, sem gravar nada.
 - **Fora da carga:** pessoas físicas (CPF) em `pessoas-fisicas.csv`; condomínios, associações, cartórios e tabelionatos; empresas que só existem nas planilhas e não estão na lista (SN 41, Tributário 7); a planilha de controle de alterações (cobre ~2%).
 - CNPJ repetido na lista: carrega uma vez só.
 

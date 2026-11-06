@@ -53,6 +53,42 @@ describe("executarImportacao", () => {
     expect(r.carregadas).toEqual([{ cnpj: CNPJ, empresa: "ACME COMERCIO LTDA", regime: "lucro_presumido" }]);
   });
 
+  describe("regime informado manualmente (empresas sem regime nas planilhas)", () => {
+    const pasta = [{ nome: "ACME COMERCIO LTDA", arquivos: [arquivo("a1", "contrato social.pdf", textoContrato("ACME COMERCIO LTDA", CNPJ))] }];
+
+    it("carrega a empresa sem regime nas planilhas quando o regime foi informado manualmente", async () => {
+      const c = montar({ lista: [{ nome: "ACME COMERCIO LTDA", cnpj: CNPJ }], pastas: pasta, regimesManuais: { [CNPJ]: "lucro_real" } });
+
+      const r = await executarImportacao(c.portas, {});
+
+      expect(r.regimeAConfirmar).toEqual([]);
+      expect(r.carregadas).toEqual([{ cnpj: CNPJ, empresa: "ACME COMERCIO LTDA", regime: "lucro_real" }]);
+    });
+
+    it("o regime das planilhas continua mandando: o manual só vale para quem não tem regime", async () => {
+      const c = montar({
+        lista: [{ nome: "ACME COMERCIO LTDA", cnpj: CNPJ }],
+        sn: [CNPJ],
+        pastas: pasta,
+        regimesManuais: { [CNPJ]: "lucro_real" },
+      });
+
+      const r = await executarImportacao(c.portas, {});
+
+      expect(r.carregadas).toEqual([{ cnpj: CNPJ, empresa: "ACME COMERCIO LTDA", regime: "simples_nacional" }]);
+    });
+
+    it("sem regime manual para a empresa, ela segue em regime a confirmar", async () => {
+      const outro = cnpjValido("554443330001");
+      const c = montar({ lista: [{ nome: "ACME COMERCIO LTDA", cnpj: CNPJ }], pastas: pasta, regimesManuais: { [outro]: "lucro_real" } });
+
+      const r = await executarImportacao(c.portas, {});
+
+      expect(r.carregadas).toEqual([]);
+      expect(r.regimeAConfirmar).toEqual([{ cnpj: CNPJ, nome: "ACME COMERCIO LTDA" }]);
+    });
+  });
+
   it("ignora de vez a entidade marcada como ignorada no tributário: nem carrega nem lista", async () => {
     const c = montar({
       lista: [{ nome: "IGREJA", cnpj: CNPJ }],

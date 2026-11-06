@@ -50,6 +50,8 @@ export type Cenario = {
   criarCliente?: "falha" | "resposta-perdida";
   /** Pasta aceita por empresa no download (ticket 03): CNPJ → nome da pasta. */
   pastaPorCnpj?: Record<string, string>;
+  /** Regime informado manualmente para empresas sem regime nas planilhas: CNPJ → regime. */
+  regimesManuais?: Record<string, "simples_nacional" | "lucro_presumido" | "lucro_real">;
   /** Texto que o OCR devolveria por arquivo (id → texto). Sem esta chave o leitor não tem OCR. */
   ocr?: Record<string, string>;
   /** Arquivos cuja leitura normal não traz texto legível (escaneado ou fonte sem mapeamento), mesmo sem OCR. */
@@ -97,7 +99,8 @@ export function montar(c: Cenario) {
     },
   };
   const pastaPorCnpj = c.pastaPorCnpj ? new Map(Object.entries(c.pastaPorCnpj)) : undefined;
-  return { portas: { planilhas, documentos, leitor, cadastro, pastaPorCnpj }, enviados, removidos, clientes, ocrChamadas };
+  const regimesManuais = c.regimesManuais ? new Map(Object.entries(c.regimesManuais)) : undefined;
+  return { portas: { planilhas, documentos, leitor, cadastro, pastaPorCnpj, regimesManuais }, enviados, removidos, clientes, ocrChamadas };
 }
 
 /** Comprovante de Inscrição e de Situação Cadastral (cartão CNPJ), na forma do texto real. */
