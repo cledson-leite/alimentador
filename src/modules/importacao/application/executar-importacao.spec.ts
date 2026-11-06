@@ -678,6 +678,49 @@ describe("executarImportacao", () => {
       expect(c.enviados.map((e) => e.origemId)).toEqual(["a1"]);
     });
 
+    describe("termos de constituição", () => {
+      const resto = [
+        `“${N}”, inscrita no CNPJ ${formatarCnpj(CNPJ)}.`,
+        "CLÁUSULA PRIMEIRA: O capital social é de R$ 10.000,00, dividido em quotas.",
+      ];
+
+      it.each([
+        ["contrato de constituição", "CONTRATO DE CONSTITUIÇÃO DE SOCIEDADE EMPRESÁRIA LIMITADA"],
+        ["contrato de constituicao, sem acento", "CONTRATO DE CONSTITUICAO DE SOCIEDADE LIMITADA"],
+        ["contratos de constituição, no plural", "CONTRATOS DE CONSTITUIÇÃO"],
+        ["ato de constituição", "ATO DE CONSTITUIÇÃO DE SOCIEDADE EMPRESÁRIA LIMITADA UNIPESSOAL"],
+        ["atos de constituição", "ATOS DE CONSTITUIÇÃO DA SOCIEDADE"],
+        ["ato constitutivo", "ATO CONSTITUTIVO DA SOCIEDADE LIMITADA"],
+        ["atos constitutivos", "ATOS CONSTITUTIVOS DA SOCIEDADE"],
+        ["contrato constitutivo", "CONTRATO CONSTITUTIVO DE SOCIEDADE"],
+        ["instrumento de constituição", "INSTRUMENTO DE CONSTITUIÇÃO DE SOCIEDADE LIMITADA"],
+        ["com ordinal ou número antes", "0 ATO DE CONSTITUIÇÃO"],
+      ])("reconhece %s como contrato quando é o título", async (_caso, titulo) => {
+        const { r } = await carregaCom([arquivo("a1", "doc.pdf", [titulo, ...resto].join("\n"))]);
+
+        expect(r.falhas).toEqual([]);
+        expect(r.carregadas.map((x) => x.empresa)).toEqual([N]);
+      });
+
+      it.each([
+        ["ato de constituição", "Os sócios, por este ato de constituição, resolvem"],
+        ["atos constitutivos", "Registrada nos atos constitutivos da sociedade, a empresa"],
+        ["contrato de constituição", "Conforme o contrato de constituição abaixo descrito"],
+      ])("reconhece %s no corpo, sem título, quando o conteúdo confirma instrumento societário", async (_caso, linha) => {
+        const { r } = await carregaCom([arquivo("a1", "doc.pdf", [linha, ...resto].join("\n"))]);
+
+        expect(r.falhas).toEqual([]);
+        expect(r.carregadas.map((x) => x.empresa)).toEqual([N]);
+      });
+
+      it("não aceita menção passageira ao ato constitutivo, sem cláusulas nem capital", async () => {
+        const { r } = await carregaCom([arquivo("a1", "procuracao.pdf", "Procuração conforme os atos constitutivos da empresa.\nOutorgante: fulano")]);
+
+        expect(r.carregadas).toEqual([]);
+        expect(r.falhas[0]).toMatchObject({ etapa: "documentos" });
+      });
+    });
+
     describe("contrato social reconhecido pelo conteúdo", () => {
       const societario = [
         "CLÁUSULA PRIMEIRA: O capital social é de R$ 10.000,00, dividido em quotas.",

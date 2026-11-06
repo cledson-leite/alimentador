@@ -40,13 +40,15 @@ const TITULO_DE_ALTERACAO = new RegExp(
   `^(?:[#\\d]+\\s*[ªº°A]?\\s*|INSTRUMENTO (?:PARTICULAR )?DE\\s+|${ORDINAL}\\s+){0,4}ALTERACAO\\b.*(?:CONTRAT|SOCIAL|INSTRUMENTO|INDIVIDUAL)`,
 );
 /** Linha de título de contrato: começa por "CONTRATO SOCIAL" ou "CONTRATO DE CONSTITUIÇÃO". */
-const TITULO_DE_CONTRATO = /^(?:[#\d]+\s*|PELO PRESENTE INSTRUMENTO (?:PARTICULAR )?DE\s+)?CONTRATO (?:SOCIAL|DE CONSTITUICAO)\b/;
+const TERMO_DE_CONTRATO =
+  "(?:CONTRATOS?\\s+SOCIA(?:L|IS)|(?:CONTRATOS?|ATOS?|INSTRUMENTOS?)\\s+(?:DE\\s+)?CONSTITUICAO|(?:CONTRATOS?|ATOS?)\\s+CONSTITUTIVOS?)";
+const TITULO_DE_CONTRATO = new RegExp(`^(?:[#\\d]+\\s*|PELO PRESENTE INSTRUMENTO (?:PARTICULAR )?DE\\s+)?${TERMO_DE_CONTRATO}\\b`);
 
 /** "ALTERAÇÃO CONTRATUAL", "ALTERAÇÕES CONTRATUAIS", "ALTERAÇÃO DO CONTRATO SOCIAL" (já sem acento e em caixa alta). */
 const FRASE_DE_ALTERACAO = /\bALTERAC(?:AO|OES)\s+(?:(?:DO|DE|DOS|DAS)\s+)?(?:CONTRATUAL|CONTRATUAIS|CONTRATO)\b/;
 
-/** "CONTRATO SOCIAL", "CONTRATOS SOCIAIS" (já sem acento e em caixa alta). */
-const FRASE_DE_CONTRATO_SOCIAL = /\bCONTRATOS?\s+SOCIA(?:L|IS)\b/;
+/** "CONTRATO SOCIAL", "CONTRATOS SOCIAIS", "ATO DE CONSTITUIÇÃO", "ATOS CONSTITUTIVOS"... (sem acento, caixa alta). */
+const FRASE_DE_CONTRATO_SOCIAL = new RegExp(`\\b${TERMO_DE_CONTRATO}\\b`);
 
 type Tipo = "contrato" | "alteracao" | "cnpj" | "outro";
 type Classificacao = { tipo: Tipo; /** índice (nas linhas não vazias) da linha de título, ou -1 */ indice: number; linhas: string[] };
