@@ -632,6 +632,17 @@ describe("executarImportacao", () => {
       expect(r.carregadas.map((x) => x.empresa)).toEqual([N]);
     });
 
+    it("diz que precisa de OCR quando o arquivo se chama contrato/alteração mas o texto só traz cabeçalhos de página", async () => {
+      const texto = ["Página 1 de 5", "Página 2 de 5", "Página 3 de 5", "Página 4 de 5", "Página 5 de 5"].join("\n");
+
+      const { r } = await carregaCom([arquivo("a1", "8 OITAVA ALTERAÇÃO CONTRATUAL.pdf", texto)]);
+
+      expect(r.carregadas).toEqual([]);
+      expect(r.falhas).toEqual([
+        { cnpj: CNPJ, nome: N, etapa: "documentos", motivo: "contrato ou alteração sem texto legível (precisa de OCR)" },
+      ]);
+    });
+
     it("reconhece 'CONTRATO DE CONSTITUIÇÃO' como contrato, mesmo sem a palavra 'social' no título", async () => {
       const texto = [N, "CONTRATO DE CONSTITUIÇÃO", "VIVIANE RENATA, brasileira, empresária", `“${N}”, inscrita no CNPJ ${formatarCnpj(CNPJ)}`].join("\n");
 
@@ -691,6 +702,10 @@ describe("executarImportacao", () => {
       ["e-mail", "Bom dia. Preciso de uma atualização de dados\nPrezado(a), A Jucesp adota os procedimentos"],
       ["manual", "PARA ALTERAÇÃO:\nQUANDO FOR ESCRITORIO ADM\nALTERAÇÃO DO TIPO DE UNIDADE"],
       ["pedido da Receita Estadual", "ESTADO DO PARANÁ\nSecretaria de Estado da Fazenda\nReceita Estadual\nPEDIDO DE ALTERAÇÃO DE CONTADOR\nCNPJ 11.222.333/0001-81"],
+      [
+        "confirmação de troca de contabilista da Receita Estadual",
+        "Receita Estadual\nComprovante de Pedido de Alteração de Contabilista\nCNPJ 11.222.333/0001-81\nConfirmação de Alteração de Contabilista/Contrato Contábil",
+      ],
       ["consulta QSA", "Consulta Quadro de Sócios e Administradores - QSA\nCNPJ: 11.222.333/0001-81\nNome Empresarial: ACME LTDA"],
     ])("não trata %s como alteração contratual, só por conter a palavra 'alteração'", async (_caso, texto) => {
       const { r } = await carregaCom([arquivo("a1", "outro.pdf", texto)]);

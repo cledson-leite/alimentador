@@ -8,6 +8,7 @@ import {
   numeroDoConteudo,
   numeroDoNome,
   raiz,
+  semAcento,
   tipoDoDocumento,
 } from "../domain/documento";
 import { cnpjValido } from "../domain/cnpj";
@@ -128,7 +129,14 @@ async function carregar(
 ): Promise<string> {
   if (casamento.tipo === "nenhuma") throw new FalhaDeEmpresa("pasta", "pasta não encontrada");
   const lidos = casamento.tipo === "unica" ? await lerPasta(portas, casamento.pasta) : await desempatar(portas, cnpj, casamento.pastas);
-  if (lidos.length === 0) throw new FalhaDeEmpresa("documentos", "sem contrato social nem alteração");
+  if (lidos.length === 0) {
+    // O arquivo existe e se chama contrato/alteração, mas o texto não traz o instrumento (páginas em imagem): é caso de OCR.
+    const pareceContrato = casamento.tipo === "unica" && casamento.pasta.arquivos.some((a) => /contrat|altera/i.test(semAcento(a.nome)));
+    throw new FalhaDeEmpresa(
+      "documentos",
+      pareceContrato ? "contrato ou alteração sem texto legível (precisa de OCR)" : "sem contrato social nem alteração",
+    );
+  }
 
   const cnpjs = lidos.flatMap((l) => cnpjsDoTexto(l.texto));
   if (cnpjs.length === 0) throw new FalhaDeEmpresa("cnpj", "nenhum documento traz CNPJ");

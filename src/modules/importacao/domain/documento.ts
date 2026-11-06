@@ -7,7 +7,7 @@ export function cnpjsDoTexto(texto: string): string[] {
   return [...texto.matchAll(CNPJ)].map((m) => soDigitos(m[0]));
 }
 
-const semAcento = (s: string) => s.normalize("NFD").replace(/\p{Diacritic}/gu, "");
+export const semAcento = (s: string) => s.normalize("NFD").replace(/\p{Diacritic}/gu, "");
 
 /** Nome entre aspas no corpo ("NOME LTDA", com sede...), que é como os contratos reais o escrevem. */
 const NOME_ENTRE_ASPAS = /[“"]([^”"\n]{3,120}?\s(?:LTDA|EIRELI|S\/A|S\.A\.|EPP|ME|SS|MEI))\.?[”"]/i;
@@ -33,7 +33,12 @@ const NOME_E_CPF = /(?:^|-\s*)([A-ZÀ-Ú][A-ZÀ-Ú ]{5,80}?)\s+\d{11}\b/;
 const JANELA = 60;
 
 /** Linha de título de alteração: "ALTERAÇÃO" no começo (após ordinal), com palavra de contrato na mesma linha. */
-const TITULO_DE_ALTERACAO = /^(?:[#\d]+\s*[ªº°A]?\s*|[A-Z]+\s+){0,3}ALTERACAO\b.*(?:CONTRAT|SOCIAL|INSTRUMENTO|INDIVIDUAL)/;
+const ORDINAL = "(?:PRIMEIRA|SEGUNDA|TERCEIRA|QUARTA|QUINTA|SEXTA|SETIMA|OITAVA|NONA|DECIMA|VIGESIMA|TRIGESIMA|QUADRAGESIMA|QUINQUAGESIMA)";
+// Antes de "ALTERAÇÃO" só entram ordinais ("OITAVA", "DÉCIMA QUARTA", "2ª") e "INSTRUMENTO DE": qualquer outra palavra
+// ("CONFIRMAÇÃO DE ALTERAÇÃO...", "PEDIDO DE ALTERAÇÃO...") é outro tipo de documento.
+const TITULO_DE_ALTERACAO = new RegExp(
+  `^(?:[#\\d]+\\s*[ªº°A]?\\s*|INSTRUMENTO (?:PARTICULAR )?DE\\s+|${ORDINAL}\\s+){0,4}ALTERACAO\\b.*(?:CONTRAT|SOCIAL|INSTRUMENTO|INDIVIDUAL)`,
+);
 /** Linha de título de contrato: começa por "CONTRATO SOCIAL" ou "CONTRATO DE CONSTITUIÇÃO". */
 const TITULO_DE_CONTRATO = /^(?:[#\d]+\s*)?CONTRATO (?:SOCIAL|DE CONSTITUICAO)\b/;
 
