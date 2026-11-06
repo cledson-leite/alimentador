@@ -84,7 +84,7 @@ export async function executarImportacao(portas: Portas, opcoes: OpcoesImportaca
       // que o casamento por nome; sem ela, vale a regra estrita. O CNPJ do contrato segue sendo a prova final.
       const aceita = pastas.find((p) => p.nome === portas.pastaPorCnpj?.get(linha.cnpj));
       const casamento: Casamento<(typeof pastas)[number]> = aceita ? { tipo: "unica", pasta: aceita } : casarPasta(linha.nome, pastas);
-      const empresa = await carregar(portas, linha.cnpj, regime, casamento);
+      const empresa = await carregar(portas, linha.cnpj, linha.nome, regime, casamento);
       resultado.carregadas.push({ cnpj: linha.cnpj, empresa, regime });
     } catch (e) {
       if (!(e instanceof FalhaDeEmpresa)) throw e;
@@ -112,7 +112,7 @@ async function desempatar(portas: Portas, cnpj: string, pastas: { arquivos: Arqu
   const donas: Lido[][] = [];
   for (const pasta of pastas) {
     const lidos = await lerPasta(portas, pasta);
-    if (lidos.flatMap((l) => cnpjsDoTexto(l.texto)).some((c) => raiz(c) === raiz(cnpj))) donas.push(lidos);
+    if (provaDoCnpj(lidos, cnpj) === "ok") donas.push(lidos);
   }
   if (donas.length === 1) return donas[0]!;
   throw new FalhaDeEmpresa(
@@ -121,9 +121,23 @@ async function desempatar(portas: Portas, cnpj: string, pastas: { arquivos: Arqu
   );
 }
 
+/**
+ * O CNPJ da lista precisa aparecer nos documentos: contrato e alteração podem citar a matriz (vale a raiz de 8 dígitos),
+ * mas o comprovante de CNPJ é do próprio estabelecimento e exige o número idêntico (filial é outra empresa).
+ */
+function provaDoCnpj(lidos: Lido[], cnpj: string): "ok" | "ausente" | "diverge" {
+  if (lidos.every((l) => cnpjsDoTexto(l.texto).length === 0)) return "ausente";
+  const bate = lidos.some((l) => {
+    const cnpjs = cnpjsDoTexto(l.texto);
+    return l.tipo === "cnpj" ? cnpjs.includes(cnpj) : cnpjs.some((c) => raiz(c) === raiz(cnpj));
+  });
+  return bate ? "ok" : "diverge";
+}
+
 async function carregar(
   portas: Portas,
   cnpj: string,
+  nomeLista: string,
   regime: Regime,
   casamento: Casamento<{ arquivos: ArquivoDocumento[] }>,
 ): Promise<string> {
@@ -138,16 +152,19 @@ async function carregar(
     );
   }
 
-  const cnpjs = lidos.flatMap((l) => cnpjsDoTexto(l.texto));
-  if (cnpjs.length === 0) throw new FalhaDeEmpresa("cnpj", "nenhum documento traz CNPJ");
-  if (!cnpjs.some((c) => raiz(c) === raiz(cnpj))) throw new FalhaDeEmpresa("cnpj", "CNPJ do documento diverge da lista");
+  const prova = provaDoCnpj(lidos, cnpj);
+  if (prova === "ausente") throw new FalhaDeEmpresa("cnpj", "nenhum documento traz CNPJ");
+  if (prova === "diverge") throw new FalhaDeEmpresa("cnpj", "CNPJ do documento diverge da lista");
 
   const contrato = lidos.find((l) => l.tipo === "contrato");
   const comprovante = lidos.find((l) => l.tipo === "cnpj");
   const doInstrumento = contrato ?? lidos.find((l) => l.tipo === "alteracao");
-  const empresa =
+  const nomeDoDocumento =
     (doInstrumento && nomeEmpresarial(doInstrumento.texto)) || (comprovante && nomeDoComprovante(comprovante.texto)) || null;
-  if (!empresa) throw new FalhaDeEmpresa("nome", "nome da empresa não encontrado no documento");
+  if (!nomeDoDocumento) throw new FalhaDeEmpresa("nome", "nome da empresa não encontrado no documento");
+  // Filial é outra empresa, com CNPJ próprio: o nome é "EMPRESA - FILIAL X" (o trecho da filial vem da lista).
+  const filial = cnpj.slice(8, 12) !== "0001" ? nomeLista.match(/\bfilial\b.*$/i)?.[0] : undefined;
+  const empresa = filial ? `${nomeDoDocumento} - ${filial.toUpperCase()}` : nomeDoDocumento;
 
   const alteracoes = numerar(lidos.filter((l) => l.tipo === "alteracao"));
 

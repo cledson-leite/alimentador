@@ -643,6 +643,27 @@ describe("executarImportacao", () => {
       ]);
     });
 
+    it.each([
+      ["alteração contratual", "celebrar a OITAVA ALTERAÇÃO CONTRATUAL da sociedade"],
+      ["sem acento", "celebrar a OITAVA ALTERACAO CONTRATUAL da sociedade"],
+      ["no plural", "celebrar a OITAVA das ALTERAÇÕES CONTRATUAIS da sociedade"],
+      ["alteração do contrato social", "celebrar a OITAVA ALTERAÇÃO DO CONTRATO SOCIAL da sociedade"],
+      ["alteração de contrato social", "celebrar a OITAVA alteração de contrato social da sociedade"],
+    ])("reconhece como alteração o documento que traz '%s' no texto, mesmo sem título", async (_caso, frase) => {
+      const texto = [
+        "Os sócios, já qualificados, resolvem de comum acordo",
+        `${frase}, que se regerá pelas cláusulas seguintes.`,
+        `“${N}”, inscrita no CNPJ ${formatarCnpj(CNPJ)}.`,
+        "Cascavel/PR, 20 de fevereiro de 2026.",
+      ].join("\n");
+
+      const { r, c } = await carregaCom([arquivo("a1", "alteracao.pdf", texto)]);
+
+      expect(r.falhas).toEqual([]);
+      const cliente = c.clientes[0] as { alteracoes: { numero: number }[] };
+      expect(cliente.alteracoes.map((a) => a.numero)).toEqual([8]);
+    });
+
     it("reconhece 'CONTRATO DE CONSTITUIÇÃO' como contrato, mesmo sem a palavra 'social' no título", async () => {
       const texto = [N, "CONTRATO DE CONSTITUIÇÃO", "VIVIANE RENATA, brasileira, empresária", `“${N}”, inscrita no CNPJ ${formatarCnpj(CNPJ)}`].join("\n");
 
@@ -779,6 +800,39 @@ describe("executarImportacao", () => {
       expect(r.falhas).toEqual([]);
       expect(c.clientes[0]).toMatchObject({ cnpj: CNPJ });
       expect(c.enviados.map((e) => e.origemId)).toEqual(["a1"]);
+    });
+
+    it("exige CNPJ idêntico no comprovante: o da matriz não prova a linha de uma filial (filial é outra empresa)", async () => {
+      const filial = cnpjValido("112223330002");
+      const c = montar({
+        lista: [{ nome: `${N} - FILIAL LONDRINA`, cnpj: filial }],
+        sn: [filial],
+        pastas: [{ nome: `${N} - FILIAL LONDRINA`, arquivos: [arquivo("a1", "cartao cnpj.pdf", textoComprovanteCnpj(N, CNPJ))] }],
+      });
+
+      const r = await executarImportacao(c.portas, {});
+
+      expect(r.carregadas).toEqual([]);
+      expect(r.falhas[0]).toMatchObject({ etapa: "cnpj", motivo: "CNPJ do documento diverge da lista" });
+    });
+
+    it("grava a filial com o nome 'EMPRESA - FILIAL X' e o CNPJ da própria filial", async () => {
+      const filial = cnpjValido("112223330002");
+      const c = montar({
+        lista: [{ nome: `${N} - FILIAL LONDRINA`, cnpj: filial }],
+        sn: [filial],
+        pastas: [
+          {
+            nome: `${N} - FILIAL LONDRINA`,
+            arquivos: [arquivo("a1", "cartao cnpj.pdf", textoComprovanteCnpj(N, filial)), arquivo("a2", "cs.pdf", textoContrato(N, CNPJ))],
+          },
+        ],
+      });
+
+      const r = await executarImportacao(c.portas, {});
+
+      expect(r.falhas).toEqual([]);
+      expect(c.clientes[0]).toMatchObject({ cnpj: filial, empresa: `${N} - FILIAL LONDRINA` });
     });
 
     it("manda para falhas quando o CNPJ do comprovante é de outra raiz", async () => {

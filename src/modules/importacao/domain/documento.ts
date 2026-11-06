@@ -42,6 +42,9 @@ const TITULO_DE_ALTERACAO = new RegExp(
 /** Linha de título de contrato: começa por "CONTRATO SOCIAL" ou "CONTRATO DE CONSTITUIÇÃO". */
 const TITULO_DE_CONTRATO = /^(?:[#\d]+\s*)?CONTRATO (?:SOCIAL|DE CONSTITUICAO)\b/;
 
+/** "ALTERAÇÃO CONTRATUAL", "ALTERAÇÕES CONTRATUAIS", "ALTERAÇÃO DO CONTRATO SOCIAL" (já sem acento e em caixa alta). */
+const FRASE_DE_ALTERACAO = /\bALTERAC(?:AO|OES)\s+(?:(?:DO|DE|DOS|DAS)\s+)?(?:CONTRATUAL|CONTRATUAIS|CONTRATO)\b/;
+
 type Tipo = "contrato" | "alteracao" | "cnpj" | "outro";
 type Classificacao = { tipo: Tipo; /** índice (nas linhas não vazias) da linha de título, ou -1 */ indice: number; linhas: string[] };
 
@@ -73,6 +76,9 @@ function classificar(texto: string): Classificacao {
   if (tituloJunto.includes("CONTRATO SOCIAL")) return resultado("contrato");
   // Constituição sem título: abre pela qualificação dos sócios e declara a denominação na CLÁUSULA PRIMEIRA.
   if (/CLAUSULA PRIMEIRA.*(DENOMINACAO EMPRESARIAL|NOME EMPRESARIAL)/.test(topo)) return resultado("contrato");
+  // Toda alteração traz "alteração contratual" ou equivalente no texto (sem acento, plural, "do contrato social").
+  const iFrase = todas.findIndex((l) => FRASE_DE_ALTERACAO.test(l));
+  if (iFrase >= 0) return resultado("alteracao", iFrase);
   return resultado("outro");
 }
 
