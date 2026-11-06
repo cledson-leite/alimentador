@@ -2,7 +2,13 @@ export type Regime = "simples_nacional" | "lucro_presumido" | "lucro_real";
 
 export type LinhaLista = { nome: string; cnpj: string };
 
-export type ArquivoDocumento = { id: string; nome: string; formato: "pdf" | "doc" | "docx" | "imagem" };
+export type ArquivoDocumento = {
+  id: string;
+  nome: string;
+  formato: "pdf" | "doc" | "docx" | "imagem";
+  /** Caminho no disco, quando o arquivo vem da cópia local do Drive. */
+  caminho?: string;
+};
 export type Pasta = { nome: string; arquivos: ArquivoDocumento[] };
 
 export interface PlanilhasPort {
