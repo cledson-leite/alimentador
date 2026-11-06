@@ -15,3 +15,5 @@ export function ehContratoSocial(texto: string): boolean {
   const inicio = texto.split("\n").slice(0, 5).join(" ").toUpperCase();
   return inicio.includes("CONTRATO SOCIAL");
 }
+
+export const raiz = (cnpj: string) => cnpj.slice(0, 8);
