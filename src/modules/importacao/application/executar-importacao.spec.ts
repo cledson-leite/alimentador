@@ -692,6 +692,59 @@ describe("executarImportacao", () => {
       expect(c.enviados.map((e) => e.origemId)).toEqual(["a1"]);
     });
 
+    describe("termos de alteração: ato constitutivo e 'alteração por ...'", () => {
+      const corpoAlteracao = [
+        `“${N}”, inscrita no CNPJ ${formatarCnpj(CNPJ)}.`,
+        "Cascavel/PR, 20 de fevereiro de 2026.",
+      ];
+
+      it.each([
+        ["ALTERAÇÃO DO ATO CONSTITUTIVO"],
+        ["ALTERAÇÃO DE ATO CONSTITUTIVO"],
+        ["ALTERAÇÃO DOS ATOS CONSTITUTIVOS"],
+        ["ALTERAÇÃO ATO CONSTITUTIVO"],
+        ["3ª ALTERAÇÃO DO ATO CONSTITUTIVO"],
+        ["ALTERAÇÃO POR TRANSFORMAÇÃO"],
+        ["ALTERAÇÃO POR INCORPORAÇÃO"],
+        ["ALTERAÇÃO POR TRANSFERÊNCIA DE SEDE"],
+        ["PRIMEIRA ALTERAÇÃO POR CISÃO PARCIAL"],
+      ])("reconhece '%s' como alteração", async (titulo) => {
+        const { r, c } = await carregaCom([arquivo("a1", "alteracao.pdf", [titulo, ...corpoAlteracao].join("\n"))]);
+
+        expect(r.falhas).toEqual([]);
+        const cliente = c.clientes[0] as { alteracoes: { data: string }[] };
+        expect(cliente.alteracoes.map((a) => a.data)).toEqual(["2026-02-20"]);
+      });
+
+      it("não confunde pedido de alteração por contabilista (outro tipo de documento) com alteração", async () => {
+        const { r } = await carregaCom([
+          arquivo("a1", "pedido.pdf", ["Receita Estadual", "PEDIDO DE ALTERAÇÃO POR CONTABILISTA", `CNPJ ${formatarCnpj(CNPJ)}`].join("\n")),
+        ]);
+
+        expect(r.carregadas).toEqual([]);
+        expect(r.falhas[0]).toMatchObject({ etapa: "documentos" });
+      });
+    });
+
+    describe("data com qualquer cidade e estado", () => {
+      it.each([
+        ["Foz do Iguaçu/PR, 5 de março de 2024."],
+        ["São Paulo - SP, 05 de março de 2024"],
+        ["Marechal Cândido Rondon (PR), 5 de março de 2024."],
+        ["Santa Terezinha de Itaipu, 5º de março de 2024."],
+        ["Município de Santa Terezinha de Itaipu, Estado do Paraná, aos 5 de março de 2024."],
+        ["5 de março de 2024."],
+      ])("lê a data em '%s'", async (linha) => {
+        const texto = [`PRIMEIRA ALTERAÇÃO CONTRATUAL`, `“${N}”, inscrita no CNPJ ${formatarCnpj(CNPJ)}.`, linha].join("\n");
+
+        const { r, c } = await carregaCom([arquivo("a1", "1 alteracao.pdf", texto)]);
+
+        expect(r.falhas).toEqual([]);
+        const cliente = c.clientes[0] as { alteracoes: { data: string }[] };
+        expect(cliente.alteracoes.map((a) => a.data)).toEqual(["2024-03-05"]);
+      });
+    });
+
     describe("termos de constituição", () => {
       const resto = [
         `“${N}”, inscrita no CNPJ ${formatarCnpj(CNPJ)}.`,

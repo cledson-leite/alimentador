@@ -37,7 +37,8 @@ const ORDINAL = "(?:PRIMEIRA|SEGUNDA|TERCEIRA|QUARTA|QUINTA|SEXTA|SETIMA|OITAVA|
 // Antes de "ALTERAÇÃO" só entram ordinais ("OITAVA", "DÉCIMA QUARTA", "2ª") e "INSTRUMENTO DE": qualquer outra palavra
 // ("CONFIRMAÇÃO DE ALTERAÇÃO...", "PEDIDO DE ALTERAÇÃO...") é outro tipo de documento.
 const TITULO_DE_ALTERACAO = new RegExp(
-  `^(?:[#\\d]+\\s*[ªº°A]?\\s*|INSTRUMENTO (?:PARTICULAR )?DE\\s+|${ORDINAL}\\s+){0,4}ALTERACAO\\b.*(?:CONTRAT|SOCIAL|INSTRUMENTO|INDIVIDUAL)`,
+  `^(?:[#\\d]+\\s*[ªº°A]?\\s*|INSTRUMENTO (?:PARTICULAR )?DE\\s+|${ORDINAL}\\s+){0,4}ALTERACAO\\b` +
+    `(?:\\s+POR\\b|.*(?:CONTRAT|SOCIAL|INSTRUMENTO|INDIVIDUAL|ATOS?\\s+CONSTITUTIVOS?))`,
 );
 /** Linha de título de contrato: começa por "CONTRATO SOCIAL" ou "CONTRATO DE CONSTITUIÇÃO". */
 const TERMO_DE_CONTRATO =
@@ -45,7 +46,7 @@ const TERMO_DE_CONTRATO =
 const TITULO_DE_CONTRATO = new RegExp(`^(?:[#\\d]+\\s*|PELO PRESENTE INSTRUMENTO (?:PARTICULAR )?DE\\s+)?${TERMO_DE_CONTRATO}\\b`);
 
 /** "ALTERAÇÃO CONTRATUAL", "ALTERAÇÕES CONTRATUAIS", "ALTERAÇÃO DO CONTRATO SOCIAL" (já sem acento e em caixa alta). */
-const FRASE_DE_ALTERACAO = /\bALTERAC(?:AO|OES)\s+(?:(?:DO|DE|DOS|DAS)\s+)?(?:CONTRATUAL|CONTRATUAIS|CONTRATO)\b/;
+const FRASE_DE_ALTERACAO = /\bALTERAC(?:AO|OES)\s+(?:(?:DO|DE|DOS|DAS)\s+)?(?:CONTRATUAL|CONTRATUAIS|CONTRATO|ATOS?\s+CONSTITUTIVOS?)\b/;
 
 /** "CONTRATO SOCIAL", "CONTRATOS SOCIAIS", "ATO DE CONSTITUIÇÃO", "ATOS CONSTITUTIVOS"... (sem acento, caixa alta). */
 const FRASE_DE_CONTRATO_SOCIAL = new RegExp(`\\b${TERMO_DE_CONTRATO}\\b`);
@@ -151,7 +152,7 @@ const MESES = ["janeiro", "fevereiro", "marco", "abril", "maio", "junho", "julho
  * Linha inteira de data: "Cascavel/PR, 20 de fevereiro de 2026." (UF com barra, hífen, parênteses, ponto ou
  * ausente), ou só "20 de fevereiro de 2026.". Só vale a linha que termina na data; mês no meio de frase não conta.
  */
-const LINHA_DATA = new RegExp(`^(?:[^\\d]{2,60}?\\s*)?(\\d{1,2})\\s*[º°o]?\\s+de\\s+(${MESES.join("|")})\\s+de\\s+(\\d{4})[\\s.\\-–—]*$`, "i");
+const LINHA_DATA = new RegExp(`^(?:[^\\d]{2,160}?\\s*)?(\\d{1,2})\\s*[º°o]?\\s+de\\s+(${MESES.join("|")})\\s+de\\s+(\\d{4})[\\s.\\-–—]*$`, "i");
 
 /**
  * A data da alteração é a última linha de data do documento: depois dela só vêm o bloco de assinaturas
