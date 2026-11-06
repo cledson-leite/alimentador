@@ -151,7 +151,7 @@ const MESES = ["janeiro", "fevereiro", "marco", "abril", "maio", "junho", "julho
  * Linha inteira de data: "Cascavel/PR, 20 de fevereiro de 2026." (UF com barra, hífen, parênteses, ponto ou
  * ausente), ou só "20 de fevereiro de 2026.". Só vale a linha que termina na data; mês no meio de frase não conta.
  */
-const LINHA_DATA = new RegExp(`^(?:[^\\d]{2,60}?\\s*)?(\\d{1,2})\\s*[º°o]?\\s+de\\s+(${MESES.join("|")})\\s+de\\s+(\\d{4})\\s*\\.?$`, "i");
+const LINHA_DATA = new RegExp(`^(?:[^\\d]{2,60}?\\s*)?(\\d{1,2})\\s*[º°o]?\\s+de\\s+(${MESES.join("|")})\\s+de\\s+(\\d{4})[\\s.\\-–—]*$`, "i");
 
 /**
  * A data da alteração é a última linha de data do documento: depois dela só vêm o bloco de assinaturas
@@ -159,8 +159,10 @@ const LINHA_DATA = new RegExp(`^(?:[^\\d]{2,60}?\\s*)?(\\d{1,2})\\s*[º°o]?\\s+
  */
 export function datasFinais(texto: string): string[] {
   const linhas = texto.split("\n").map((l) => semAcento(l.trim())).filter(Boolean);
-  for (const l of linhas.reverse()) {
-    const m = l.match(LINHA_DATA);
+  // A data pode vir quebrada em duas linhas ("Cascavel/PR, 20" / "de fevereiro de 2026."): testa a linha e a junção
+  // com a anterior, de baixo para cima.
+  for (let i = linhas.length - 1; i >= 0; i--) {
+    const m = linhas[i]!.match(LINHA_DATA) ?? (i > 0 ? `${linhas[i - 1]} ${linhas[i]}`.match(LINHA_DATA) : null);
     if (m) return [`${m[3]}-${String(MESES.indexOf(m[2]!.toLowerCase()) + 1).padStart(2, "0")}-${m[1]!.padStart(2, "0")}`];
   }
   return [];

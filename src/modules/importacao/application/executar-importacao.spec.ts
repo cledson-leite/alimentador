@@ -1023,6 +1023,9 @@ describe("executarImportacao", () => {
       ["Cascavel, 20 de fevereiro de 2026."],
       ["20 de fevereiro de 2026."],
       ["Cascavel/PR, 20 de Fevereiro de 2026"],
+      ["Cascavel, 20 de fevereiro de 2026.-"],
+      ["Cascavel - PR, 20 de fevereiro de 2026.."],
+      ["Cascavel/PR, 20\nde fevereiro de 2026."],
     ])("lê a data em %s mesmo com o bloco de assinaturas depois", async (linha) => {
       const c = montar({
         lista: [{ nome: N, cnpj: CNPJ }],
