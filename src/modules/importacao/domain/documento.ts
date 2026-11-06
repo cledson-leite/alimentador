@@ -40,10 +40,13 @@ const TITULO_DE_ALTERACAO = new RegExp(
   `^(?:[#\\d]+\\s*[ªº°A]?\\s*|INSTRUMENTO (?:PARTICULAR )?DE\\s+|${ORDINAL}\\s+){0,4}ALTERACAO\\b.*(?:CONTRAT|SOCIAL|INSTRUMENTO|INDIVIDUAL)`,
 );
 /** Linha de título de contrato: começa por "CONTRATO SOCIAL" ou "CONTRATO DE CONSTITUIÇÃO". */
-const TITULO_DE_CONTRATO = /^(?:[#\d]+\s*)?CONTRATO (?:SOCIAL|DE CONSTITUICAO)\b/;
+const TITULO_DE_CONTRATO = /^(?:[#\d]+\s*|PELO PRESENTE INSTRUMENTO (?:PARTICULAR )?DE\s+)?CONTRATO (?:SOCIAL|DE CONSTITUICAO)\b/;
 
 /** "ALTERAÇÃO CONTRATUAL", "ALTERAÇÕES CONTRATUAIS", "ALTERAÇÃO DO CONTRATO SOCIAL" (já sem acento e em caixa alta). */
 const FRASE_DE_ALTERACAO = /\bALTERAC(?:AO|OES)\s+(?:(?:DO|DE|DOS|DAS)\s+)?(?:CONTRATUAL|CONTRATUAIS|CONTRATO)\b/;
+
+/** "CONTRATO SOCIAL", "CONTRATOS SOCIAIS" (já sem acento e em caixa alta). */
+const FRASE_DE_CONTRATO_SOCIAL = /\bCONTRATOS?\s+SOCIA(?:L|IS)\b/;
 
 type Tipo = "contrato" | "alteracao" | "cnpj" | "outro";
 type Classificacao = { tipo: Tipo; /** índice (nas linhas não vazias) da linha de título, ou -1 */ indice: number; linhas: string[] };
@@ -73,12 +76,21 @@ function classificar(texto: string): Classificacao {
 
   const iContrato = janela.findIndex((l) => TITULO_DE_CONTRATO.test(l));
   if (iContrato >= 0) return resultado("contrato", iContrato);
-  if (tituloJunto.includes("CONTRATO SOCIAL")) return resultado("contrato");
   // Constituição sem título: abre pela qualificação dos sócios e declara a denominação na CLÁUSULA PRIMEIRA.
   if (/CLAUSULA PRIMEIRA.*(DENOMINACAO EMPRESARIAL|NOME EMPRESARIAL)/.test(topo)) return resultado("contrato");
   // Toda alteração traz "alteração contratual" ou equivalente no texto (sem acento, plural, "do contrato social").
   const iFrase = todas.findIndex((l) => FRASE_DE_ALTERACAO.test(l));
   if (iFrase >= 0) return resultado("alteracao", iFrase);
+  // "Contrato social" (ou só "contrato") fora do título aparece de passagem em muito documento: o conteúdo precisa
+  // confirmar um instrumento societário (cláusulas e capital/quotas/objeto), e contrato de serviços fica de fora.
+  const corpo = todas.join(" ");
+  const confirmaSocietario =
+    /\bCLAUSULA\b/.test(corpo) && /CAPITAL SOCIAL|QUOTAS|SOCIEDADE EMPRESARIA|OBJETO SOCIAL|DENOMINACAO/.test(corpo) && !/PRESTACAO DE SERVICO/.test(janela.join(" "));
+  if (confirmaSocietario) {
+    const iSocial = todas.findIndex((l) => FRASE_DE_CONTRATO_SOCIAL.test(l));
+    const iSimples = janela.findIndex((l) => /^(?:[#\d]+\s*)?CONTRATO\b/.test(l));
+    if (iSocial >= 0 || iSimples >= 0) return resultado("contrato", iSocial >= 0 ? iSocial : iSimples);
+  }
   return resultado("outro");
 }
 

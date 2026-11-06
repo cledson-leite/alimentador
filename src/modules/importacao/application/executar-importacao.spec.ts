@@ -664,6 +664,38 @@ describe("executarImportacao", () => {
       expect(cliente.alteracoes.map((a) => a.numero)).toEqual([8]);
     });
 
+    describe("contrato social reconhecido pelo conteúdo", () => {
+      const societario = [
+        "CLÁUSULA PRIMEIRA: O capital social é de R$ 10.000,00, dividido em quotas.",
+        "CLÁUSULA SEGUNDA: O objeto social da sociedade será o comércio varejista.",
+      ];
+      const corpo = (primeira: string, ...resto: string[]) =>
+        [primeira, `“${N}”, inscrita no CNPJ ${formatarCnpj(CNPJ)}.`, ...resto].join("\n");
+
+      it.each([
+        ["contrato social no corpo", "Os sócios resolvem constituir sociedade, por este contrato social, regida pelas cláusulas abaixo."],
+        ["contratos sociais (plural)", "Os sócios resolvem constituir sociedade, conforme os contratos sociais registrados."],
+        ["só 'contrato' no título", "CONTRATO DA SOCIEDADE EMPRESÁRIA LIMITADA"],
+      ])("aceita %s quando o texto traz cláusulas e capital social", async (_caso, linha) => {
+        const { r } = await carregaCom([arquivo("a1", "contrato.pdf", corpo(linha, ...societario))]);
+
+        expect(r.falhas).toEqual([]);
+        expect(r.carregadas.map((x) => x.empresa)).toEqual([N]);
+      });
+
+      it.each([
+        ["menção passageira, sem cláusulas nem capital", "Conforme consta no contrato social da empresa, segue a procuração."],
+        ["contrato de prestação de serviços do escritório", "CONTRATO DE PRESTAÇÃO DE SERVIÇOS CONTÁBEIS"],
+        ["contrato de locação", "CONTRATO DE LOCAÇÃO DE IMÓVEL COMERCIAL"],
+      ])("não aceita %s como contrato social", async (_caso, linha) => {
+        const sem = _caso.startsWith("menção") ? [] : _caso.includes("prestação") ? ["CLÁUSULA PRIMEIRA: o capital social e as quotas", "serviço de contabilidade"] : ["CLÁUSULA PRIMEIRA: o locador cede o imóvel"];
+        const { r } = await carregaCom([arquivo("a1", "outro.pdf", corpo(linha, ...sem))]);
+
+        expect(r.carregadas).toEqual([]);
+        expect(r.falhas[0]).toMatchObject({ etapa: "documentos" });
+      });
+    });
+
     it("reconhece 'CONTRATO DE CONSTITUIÇÃO' como contrato, mesmo sem a palavra 'social' no título", async () => {
       const texto = [N, "CONTRATO DE CONSTITUIÇÃO", "VIVIANE RENATA, brasileira, empresária", `“${N}”, inscrita no CNPJ ${formatarCnpj(CNPJ)}`].join("\n");
 
