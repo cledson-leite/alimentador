@@ -13,7 +13,8 @@ async function indiceDoDisco(raiz: string): Promise<Map<string, string>> {
       const caminho = join(dir, e.name);
       if (e.isDirectory()) await visitar(caminho);
       else {
-        const m = e.name.match(/__([^_.]{6})\.[A-Za-z0-9]+$/);
+        // O id do Drive usa letras, dígitos, "_" e "-": os 6 caracteres do sufixo podem conter "_".
+        const m = e.name.match(/__([\w-]{6})\.[A-Za-z0-9]+$/);
         if (m) indice.set(m[1]!, caminho);
       }
     }
