@@ -227,7 +227,7 @@ describe("executarImportacao", () => {
     expect(c.enviados).toHaveLength(3);
   });
 
-  it("manda para falhas a empresa com sequência de alterações quebrada", async () => {
+  it("grava as alterações com os números lidos, mesmo faltando números ou não começando em 1", async () => {
     const N = "ACME COMERCIO LTDA";
     const c = montar({
       lista: [{ nome: N, cnpj: CNPJ }],
@@ -246,10 +246,32 @@ describe("executarImportacao", () => {
 
     const r = await executarImportacao(c.portas, {});
 
-    expect(r.falhas).toEqual([
-      { cnpj: CNPJ, nome: N, etapa: "numero", motivo: "sequência de alterações quebrada" },
-    ]);
-    expect(c.enviados).toEqual([]);
+    expect(r.falhas).toEqual([]);
+    const cliente = c.clientes[0] as { alteracoes: { numero: number }[] };
+    expect(cliente.alteracoes.map((a) => a.numero)).toEqual([1, 3]);
+  });
+
+  it("grava a pasta que só tem as alterações mais recentes, com os números do documento", async () => {
+    const N = "ACME COMERCIO LTDA";
+    const c = montar({
+      lista: [{ nome: N, cnpj: CNPJ }],
+      sn: [CNPJ],
+      pastas: [
+        {
+          nome: N,
+          arquivos: [
+            arquivo("a4", "4 alteracao.pdf", textoAlteracao(N, CNPJ, "QUARTA", "10 de maio de 2022")),
+            arquivo("a5", "5 alteracao.pdf", textoAlteracao(N, CNPJ, "QUINTA", "20 de agosto de 2023")),
+          ],
+        },
+      ],
+    });
+
+    const r = await executarImportacao(c.portas, {});
+
+    expect(r.falhas).toEqual([]);
+    const cliente = c.clientes[0] as { alteracoes: { numero: number }[] };
+    expect(cliente.alteracoes.map((a) => a.numero)).toEqual([4, 5]);
   });
 
   it("manda para falhas a alteração sem data legível, sem enviar nada ao Storage", async () => {

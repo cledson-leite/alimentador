@@ -172,8 +172,5 @@ function numerar(alteracoes: Lido[]) {
   numerados.forEach((d, i) => {
     if (d.numero === numerados[i - 1]?.numero) throw new FalhaDeEmpresa("numero", "número de alteração repetido");
   });
-  if (numerados.length > 0 && numerados.some((d, i) => d.numero !== i + 1)) {
-    throw new FalhaDeEmpresa("numero", "sequência de alterações quebrada");
-  }
   return numerados;
 }
