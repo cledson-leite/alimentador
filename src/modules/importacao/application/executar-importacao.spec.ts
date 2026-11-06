@@ -664,6 +664,20 @@ describe("executarImportacao", () => {
       expect(cliente.alteracoes.map((a) => a.numero)).toEqual([8]);
     });
 
+    it.each([
+      ["protocolo da Junta", "Secretaria da Micro e Pequena Empresa\nProtocolo 241234567\nEvento: Alteração contratual\nSituação: em análise"],
+      ["pedido de alteração cadastral", "Cadastro de Contribuintes - Comprovante do Pedido\nNatureza do Pedido: Alteração contratual de Inscrição Estadual"],
+      ["orientação interna", "Alterações para rodar em 03/2026\n* Alteração contratual - VIA BR INFORMATICA LTDA\nAlterar razão social para: ACME LTDA"],
+    ])("ignora %s que cita 'alteração contratual' mas não é o instrumento, sem bloquear a empresa", async (_caso, texto) => {
+      const { r, c } = await carregaCom([
+        arquivo("a1", "contrato social.pdf", textoContrato(N, CNPJ)),
+        arquivo("a2", "protocolo.pdf", texto),
+      ]);
+
+      expect(r.falhas).toEqual([]);
+      expect(c.enviados.map((e) => e.origemId)).toEqual(["a1"]);
+    });
+
     describe("contrato social reconhecido pelo conteúdo", () => {
       const societario = [
         "CLÁUSULA PRIMEIRA: O capital social é de R$ 10.000,00, dividido em quotas.",
