@@ -63,6 +63,19 @@ describe("executarImportacao", () => {
     expect(r.regimeAConfirmar).toEqual([{ cnpj: CNPJ, nome: "ACME COMERCIO LTDA" }]);
   });
 
+  it("ignora de vez a entidade marcada como ignorada no tributário: nem carrega nem lista", async () => {
+    const c = montar({
+      lista: [{ nome: "IGREJA", cnpj: CNPJ }],
+      sn: [CNPJ],
+      tributario: { [CNPJ]: "ignorada" },
+      pastas: [],
+    });
+
+    const r = await executarImportacao(c.portas, {});
+
+    expect(r).toMatchObject({ carregadas: [], falhas: [], regimeAConfirmar: [], pessoasFisicas: [], puladas: [] });
+  });
+
   it("não carrega empresa sem regime em nenhuma planilha e a lista em regimeAConfirmar", async () => {
     const c = montar({
       lista: [{ nome: "ACME COMERCIO LTDA", cnpj: CNPJ }],
@@ -460,5 +473,25 @@ describe("executarImportacao", () => {
     const caminhos = c.enviados.map((e) => e.caminho);
     expect(caminhos).toHaveLength(4);
     expect(new Set(caminhos).size).toBe(4);
+  });
+
+  it("com a lista de CNPJs processa só essas empresas (para refazer falhas)", async () => {
+    const outro = cnpjValido("554443330001");
+    const c = montar({
+      lista: [
+        { nome: N, cnpj: CNPJ },
+        { nome: "OUTRA LTDA", cnpj: outro },
+      ],
+      sn: [CNPJ, outro],
+      pastas: [
+        { nome: N, arquivos: [arquivo("a1", "cs.pdf", textoContrato(N, CNPJ))] },
+        { nome: "OUTRA LTDA", arquivos: [arquivo("b1", "cs.pdf", textoContrato("OUTRA LTDA", outro))] },
+      ],
+    });
+
+    const r = await executarImportacao(c.portas, { cnpjs: [outro] });
+
+    expect(r.carregadas.map((x) => x.cnpj)).toEqual([outro]);
+    expect(r.falhas).toEqual([]);
   });
 });

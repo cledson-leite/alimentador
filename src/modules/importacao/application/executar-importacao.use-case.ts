@@ -46,8 +46,11 @@ class FalhaDeEmpresa extends Error {
 
 const hoje = () => new Date().toISOString().slice(0, 10);
 
-export async function executarImportacao(portas: Portas, _opcoes: Record<string, never>): Promise<Resultado> {
-  const lista = await portas.planilhas.lerLista();
+export type OpcoesImportacao = { cnpjs?: string[] };
+
+export async function executarImportacao(portas: Portas, opcoes: OpcoesImportacao): Promise<Resultado> {
+  const alvo = opcoes.cnpjs ? new Set(opcoes.cnpjs) : null;
+  const lista = (await portas.planilhas.lerLista()).filter((l) => !alvo || alvo.has(l.cnpj));
   const sn = await portas.planilhas.lerSn();
   const tributario = await portas.planilhas.lerTributario();
   const pastas = await portas.documentos.listarPastas();
@@ -62,6 +65,7 @@ export async function executarImportacao(portas: Portas, _opcoes: Record<string,
     if (vistos.has(linha.cnpj)) continue;
     vistos.add(linha.cnpj);
     const regime = resolverRegime(linha.cnpj, sn, tributario);
+    if (regime === "ignorada") continue;
     if (!regime) {
       resultado.regimeAConfirmar.push({ cnpj: linha.cnpj, nome: linha.nome });
       continue;

@@ -25,7 +25,7 @@ describe("interpretação das planilhas", () => {
     expect(cnpjsDoSn(rows)).toEqual(new Set(["11222333000181"]));
   });
 
-  it("lê o regime do tributário e ignora 'OUTRAS ENT.'", () => {
+  it("lê o regime do tributário e marca 'OUTRAS ENT.' como ignorada", () => {
     const rows = [
       ["11.222.333/0001-81", "ACME", "123", "L. PRESUMIDO"],
       ["44.373.409/0001-00", "OUTRA", "999", "L. REAL"],
@@ -36,6 +36,7 @@ describe("interpretação das planilhas", () => {
       new Map([
         ["11222333000181", "lucro_presumido"],
         ["44373409000100", "lucro_real"],
+        ["55555555000155", "ignorada"],
       ]),
     );
   });

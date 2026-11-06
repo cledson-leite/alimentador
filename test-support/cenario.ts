@@ -36,7 +36,7 @@ export function arquivo(id: string, nome: string, texto: string): ArquivoDocumen
 export type Cenario = {
   lista?: { nome: string; cnpj: string }[];
   sn?: string[];
-  tributario?: Record<string, "lucro_presumido" | "lucro_real" | "baixou">;
+  tributario?: Record<string, "lucro_presumido" | "lucro_real" | "baixou" | "ignorada">;
   pastas?: (Pasta & { arquivos: (ArquivoDocumento & { texto: string })[] })[];
   existentes?: string[];
   criarCliente?: "falha" | "resposta-perdida";
