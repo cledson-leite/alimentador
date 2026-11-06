@@ -706,6 +706,20 @@ describe("executarImportacao", () => {
       expect(c.enviados.map((e) => e.origemId)).toEqual(["a1"]);
     });
 
+    it("lê o número da alteração no título mesmo quando a primeira linha é só o número da página", async () => {
+      const texto = (pagina: string, ordinal: string) =>
+        [pagina, `${ordinal} ALTERAÇÃO DE CONTRATO SOCIAL`, "DE SOCIEDADE EMPRESÁRIA LIMITADA", N, `CNPJ: ${formatarCnpj(CNPJ)}`, "Cascavel/PR, 20 de fevereiro de 2026."].join("\n");
+
+      const { r, c } = await carregaCom([
+        arquivo("a1", "1 alteracao.pdf", texto("1", "PRIMEIRA").replace("2026", "2024")),
+        arquivo("a3", "3 alteracao.pdf", texto("1", "TERCEIRA")),
+      ]);
+
+      expect(r.falhas).toEqual([]);
+      const cliente = c.clientes[0] as { alteracoes: { numero: number }[] };
+      expect(cliente.alteracoes.map((a) => a.numero)).toEqual([1, 3]);
+    });
+
     describe("termos de alteração: ato constitutivo e 'alteração por ...'", () => {
       const corpoAlteracao = [
         `“${N}”, inscrita no CNPJ ${formatarCnpj(CNPJ)}.`,

@@ -72,7 +72,10 @@ function classificar(texto: string): Classificacao {
   // Título nas 3 primeiras linhas vale direto. Mais abaixo (atrás do carimbo da Junta) só vale em instrumento, isto é,
   // com cláusulas: o protocolo da Junta lista eventos como "ALTERAÇÃO/CONSOLIDAÇÃO DE CONTRATO/ESTATUTO" sem ser um.
   const temClausulas = /\bCLAUSULAS?\b/.test(todas.join(" "));
-  const iAlteracao = janela.findIndex((_, i) => TITULO_DE_ALTERACAO.test(todas.slice(i, i + 3).join(" ")));
+  // O título casa a partir de uma linha, mas o índice guardado é o da linha que tem a palavra "ALTERAÇÃO": uma linha só
+  // com o número da página ("1") pode abrir a junção e não pode ser lida como o número da alteração.
+  const inicioDoTitulo = janela.findIndex((_, i) => TITULO_DE_ALTERACAO.test(todas.slice(i, i + 3).join(" ")));
+  const iAlteracao = inicioDoTitulo < 0 ? -1 : inicioDoTitulo + Math.max(0, todas.slice(inicioDoTitulo, inicioDoTitulo + 3).findIndex((l) => l.includes("ALTERACAO")));
   // Requerimento da Junta (e a "CAPA DO REQUERIMENTO") é o pacote de protocolo, não o instrumento: o título decide.
   // Se "CAPA"/"REQUERIMENTO" abre o documento antes de qualquer título de alteração, é requerimento. O nome do arquivo
   // não conta: "segunda alt REQUERIMENTO..." é alteração quando o conteúdo abre pelo título de alteração.
