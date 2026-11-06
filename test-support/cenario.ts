@@ -67,3 +67,12 @@ export function montar(c: Cenario) {
   };
   return { portas: { planilhas, documentos, leitor, cadastro }, enviados, removidos, clientes };
 }
+
+export function textoAlteracao(nome: string, cnpj: string | undefined, ordinal: string, dataExtenso?: string): string {
+  return [
+    `${ordinal} ALTERAÇÃO DO CONTRATO SOCIAL`,
+    `A sociedade girará sob o nome empresarial ${nome}${cnpj ? `, inscrita no CNPJ sob o nº ${formatarCnpj(cnpj)}` : ""}.`,
+    ...(dataExtenso ? [`Cascavel, PR, ${dataExtenso}`] : []),
+    "Assinado digitalmente",
+  ].join("\n");
+}

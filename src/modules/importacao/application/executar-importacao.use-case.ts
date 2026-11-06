@@ -1,10 +1,18 @@
 import { randomUUID } from "node:crypto";
 
-import { cnpjsDoTexto, ehContratoSocial, nomeEmpresarial, raiz } from "../domain/documento";
+import {
+  cnpjsDoTexto,
+  datasFinais,
+  nomeEmpresarial,
+  numeroDoConteudo,
+  numeroDoNome,
+  raiz,
+  tipoDoDocumento,
+} from "../domain/documento";
 import { pastaPorNomeExato } from "../domain/pasta";
 import { resolverRegime } from "../domain/regime";
 
-import type { CadastroPort, DocumentosPort, LeitorPort, PlanilhasPort, Regime } from "./ports/portas";
+import type { ArquivoDocumento, CadastroPort, DocumentosPort, LeitorPort, PlanilhasPort, Regime } from "./ports/portas";
 
 export type Portas = {
   planilhas: PlanilhasPort;
@@ -21,6 +29,19 @@ export type Resultado = {
   regimeAConfirmar: { cnpj: string; nome: string }[];
 };
 
+type Lido = { arquivo: ArquivoDocumento; texto: string; tipo: "contrato" | "alteracao" };
+
+class FalhaDeEmpresa extends Error {
+  constructor(
+    readonly etapa: string,
+    readonly motivo: string,
+  ) {
+    super(motivo);
+  }
+}
+
+const hoje = () => new Date().toISOString().slice(0, 10);
+
 export async function executarImportacao(portas: Portas, _opcoes: Record<string, never>): Promise<Resultado> {
   const lista = await portas.planilhas.lerLista();
   const sn = await portas.planilhas.lerSn();
@@ -29,51 +50,88 @@ export async function executarImportacao(portas: Portas, _opcoes: Record<string,
   const resultado: Resultado = { carregadas: [], falhas: [], regimeAConfirmar: [] };
 
   for (const linha of lista) {
-    const pasta = pastaPorNomeExato(linha.nome, pastas);
     const regime = resolverRegime(linha.cnpj, sn, tributario);
     if (!regime) {
       resultado.regimeAConfirmar.push({ cnpj: linha.cnpj, nome: linha.nome });
       continue;
     }
-    if (!pasta) {
-      resultado.falhas.push({ cnpj: linha.cnpj, nome: linha.nome, etapa: "pasta", motivo: "pasta não encontrada" });
-      continue;
+    try {
+      const empresa = await carregar(portas, linha.cnpj, regime, pastaPorNomeExato(linha.nome, pastas));
+      resultado.carregadas.push({ cnpj: linha.cnpj, empresa, regime });
+    } catch (e) {
+      if (!(e instanceof FalhaDeEmpresa)) throw e;
+      resultado.falhas.push({ cnpj: linha.cnpj, nome: linha.nome, etapa: e.etapa, motivo: e.motivo });
     }
-    const arq = pasta.arquivos[0]!;
-    const texto = (await portas.leitor.lerTexto(arq)) ?? "";
-    if (!ehContratoSocial(texto)) continue;
-    const cnpjs = cnpjsDoTexto(texto);
-    if (cnpjs.length === 0) {
-      resultado.falhas.push({
-        cnpj: linha.cnpj,
-        nome: linha.nome,
-        etapa: "cnpj",
-        motivo: "nenhum documento traz CNPJ",
-      });
-      continue;
-    }
-    if (!cnpjs.some((c) => raiz(c) === raiz(linha.cnpj))) {
-      resultado.falhas.push({
-        cnpj: linha.cnpj,
-        nome: linha.nome,
-        etapa: "cnpj",
-        motivo: "CNPJ do documento diverge da lista",
-      });
-      continue;
-    }
-    const id = randomUUID();
-    const caminho = `${id}/contrato-social/${arq.nome}`;
-    const empresa = nomeEmpresarial(texto)!;
-    await portas.cadastro.enviar(caminho, arq);
-    await portas.cadastro.criarCliente({
-      id,
-      empresa,
-      cnpj: linha.cnpj,
-      regime,
-      contratoSocialCaminho: caminho,
-      alteracoes: [],
-    });
-    resultado.carregadas.push({ cnpj: linha.cnpj, empresa, regime });
   }
   return resultado;
+}
+
+async function carregar(
+  portas: Portas,
+  cnpj: string,
+  regime: Regime,
+  pasta: { arquivos: ArquivoDocumento[] } | undefined,
+): Promise<string> {
+  if (!pasta) throw new FalhaDeEmpresa("pasta", "pasta não encontrada");
+
+  const lidos: Lido[] = [];
+  for (const arquivo of pasta.arquivos) {
+    const texto = (await portas.leitor.lerTexto(arquivo)) ?? "";
+    const tipo = tipoDoDocumento(texto);
+    if (tipo !== "outro") lidos.push({ arquivo, texto, tipo });
+  }
+  if (lidos.length === 0) throw new FalhaDeEmpresa("documentos", "sem contrato social nem alteração");
+
+  const cnpjs = lidos.flatMap((l) => cnpjsDoTexto(l.texto));
+  if (cnpjs.length === 0) throw new FalhaDeEmpresa("cnpj", "nenhum documento traz CNPJ");
+  if (!cnpjs.some((c) => raiz(c) === raiz(cnpj))) throw new FalhaDeEmpresa("cnpj", "CNPJ do documento diverge da lista");
+
+  const contrato = lidos.find((l) => l.tipo === "contrato");
+  const empresa = nomeEmpresarial((contrato ?? lidos[0]!).texto);
+  if (!empresa) throw new FalhaDeEmpresa("nome", "nome da empresa não encontrado no documento");
+
+  const alteracoes = numerar(lidos.filter((l) => l.tipo === "alteracao"));
+
+  const id = randomUUID();
+  const enviados: string[] = [];
+  const subir = async (pasta: string, a: ArquivoDocumento) => {
+    const caminho = `${id}/${pasta}/${a.nome}`;
+    await portas.cadastro.enviar(caminho, a);
+    enviados.push(caminho);
+    return caminho;
+  };
+
+  const contratoCaminho = await subir("contrato-social", (contrato ?? alteracoes.at(-1)!.lido).arquivo);
+  const itens = [];
+  for (const a of alteracoes) {
+    itens.push({
+      id: randomUUID(),
+      numero: a.numero,
+      data: a.data,
+      arquivoCaminho: await subir("alteracoes-contratuais", a.lido.arquivo),
+    });
+  }
+  await portas.cadastro.criarCliente({ id, empresa, cnpj, regime, contratoSocialCaminho: contratoCaminho, alteracoes: itens });
+  return empresa;
+}
+
+function numerar(alteracoes: Lido[]) {
+  const datados = alteracoes.map((lido) => {
+    const datas = datasFinais(lido.texto);
+    if (datas.length !== 1) throw new FalhaDeEmpresa("data", "data da alteração ausente ou ambígua");
+    if (datas[0]! > hoje()) throw new FalhaDeEmpresa("data", "data da alteração no futuro");
+    return { lido, data: datas[0]!, numero: numeroDoConteudo(lido.texto) ?? numeroDoNome(lido.arquivo.nome) };
+  });
+  const semNumero = datados.filter((d) => d.numero === null);
+  if (semNumero.length > 1) throw new FalhaDeEmpresa("numero", "mais de uma alteração sem número");
+  const numerados = datados
+    .map((d) => ({ ...d, numero: d.numero ?? 1 }))
+    .sort((a, b) => a.numero - b.numero);
+  numerados.forEach((d, i) => {
+    if (d.numero === numerados[i - 1]?.numero) throw new FalhaDeEmpresa("numero", "número de alteração repetido");
+  });
+  if (numerados.length > 0 && numerados.some((d, i) => d.numero !== i + 1)) {
+    throw new FalhaDeEmpresa("numero", "sequência de alterações quebrada");
+  }
+  return numerados;
 }

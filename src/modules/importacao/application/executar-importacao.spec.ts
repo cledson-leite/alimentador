@@ -1,4 +1,4 @@
-import { arquivo, cnpjValido, montar, textoContrato } from "../../../../test-support/cenario";
+import { arquivo, cnpjValido, montar, textoAlteracao, textoContrato } from "../../../../test-support/cenario";
 
 import { executarImportacao } from "./executar-importacao.use-case";
 
@@ -137,6 +137,109 @@ describe("executarImportacao", () => {
     expect(r.carregadas).toEqual([]);
     expect(r.falhas).toEqual([
       { cnpj: CNPJ, nome: "ACME COMERCIO LTDA", etapa: "cnpj", motivo: "nenhum documento traz CNPJ" },
+    ]);
+    expect(c.enviados).toEqual([]);
+  });
+
+  it("grava as alterações com número e data lidos do conteúdo, mais uma cópia de cada arquivo no Storage", async () => {
+    const N = "ACME COMERCIO LTDA";
+    const c = montar({
+      lista: [{ nome: N, cnpj: CNPJ }],
+      sn: [CNPJ],
+      pastas: [
+        {
+          nome: N,
+          arquivos: [
+            arquivo("a1", "contrato social.pdf", textoContrato(N, CNPJ)),
+            arquivo("a3", "2 alteracao.pdf", textoAlteracao(N, CNPJ, "SEGUNDA", "20 de agosto de 2023")),
+            arquivo("a2", "1 alteracao.pdf", textoAlteracao(N, CNPJ, "PRIMEIRA", "10 de maio de 2022")),
+          ],
+        },
+      ],
+    });
+
+    const r = await executarImportacao(c.portas, {});
+
+    expect(r.falhas).toEqual([]);
+    const cliente = c.clientes[0] as { alteracoes: { numero: number; data: string; arquivoCaminho: string }[] };
+    expect(cliente.alteracoes.map(({ numero, data }) => ({ numero, data }))).toEqual([
+      { numero: 1, data: "2022-05-10" },
+      { numero: 2, data: "2023-08-20" },
+    ]);
+    expect(c.enviados).toHaveLength(3);
+    expect(cliente.alteracoes.every((a) => a.arquivoCaminho.includes("/alteracoes-contratuais/"))).toBe(true);
+  });
+
+  it("usa a alteração mais recente como contrato social quando não há contrato, com duas cópias no Storage", async () => {
+    const N = "ACME COMERCIO LTDA";
+    const c = montar({
+      lista: [{ nome: N, cnpj: CNPJ }],
+      sn: [CNPJ],
+      pastas: [
+        {
+          nome: N,
+          arquivos: [
+            arquivo("a1", "1 alteracao.pdf", textoAlteracao(N, CNPJ, "PRIMEIRA", "10 de maio de 2022")),
+            arquivo("a2", "2 alteracao.pdf", textoAlteracao(N, CNPJ, "SEGUNDA", "20 de agosto de 2023")),
+          ],
+        },
+      ],
+    });
+
+    const r = await executarImportacao(c.portas, {});
+
+    expect(r.falhas).toEqual([]);
+    const cliente = c.clientes[0] as { contratoSocialCaminho: string };
+    expect(cliente.contratoSocialCaminho).toContain("/contrato-social/");
+    expect(c.enviados.filter((e) => e.origemId === "a2")).toHaveLength(2);
+    expect(c.enviados).toHaveLength(3);
+  });
+
+  it("manda para falhas a empresa com sequência de alterações quebrada", async () => {
+    const N = "ACME COMERCIO LTDA";
+    const c = montar({
+      lista: [{ nome: N, cnpj: CNPJ }],
+      sn: [CNPJ],
+      pastas: [
+        {
+          nome: N,
+          arquivos: [
+            arquivo("a0", "contrato social.pdf", textoContrato(N, CNPJ)),
+            arquivo("a1", "1 alteracao.pdf", textoAlteracao(N, CNPJ, "PRIMEIRA", "10 de maio de 2022")),
+            arquivo("a3", "3 alteracao.pdf", textoAlteracao(N, CNPJ, "TERCEIRA", "20 de agosto de 2023")),
+          ],
+        },
+      ],
+    });
+
+    const r = await executarImportacao(c.portas, {});
+
+    expect(r.falhas).toEqual([
+      { cnpj: CNPJ, nome: N, etapa: "numero", motivo: "sequência de alterações quebrada" },
+    ]);
+    expect(c.enviados).toEqual([]);
+  });
+
+  it("manda para falhas a alteração sem data legível, sem enviar nada ao Storage", async () => {
+    const N = "ACME COMERCIO LTDA";
+    const c = montar({
+      lista: [{ nome: N, cnpj: CNPJ }],
+      sn: [CNPJ],
+      pastas: [
+        {
+          nome: N,
+          arquivos: [
+            arquivo("a0", "contrato social.pdf", textoContrato(N, CNPJ)),
+            arquivo("a1", "1 alteracao.pdf", textoAlteracao(N, CNPJ, "PRIMEIRA")),
+          ],
+        },
+      ],
+    });
+
+    const r = await executarImportacao(c.portas, {});
+
+    expect(r.falhas).toEqual([
+      { cnpj: CNPJ, nome: N, etapa: "data", motivo: "data da alteração ausente ou ambígua" },
     ]);
     expect(c.enviados).toEqual([]);
   });
