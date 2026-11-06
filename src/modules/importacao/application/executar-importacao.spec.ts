@@ -243,4 +243,75 @@ describe("executarImportacao", () => {
     ]);
     expect(c.enviados).toEqual([]);
   });
+
+  const N = "ACME COMERCIO LTDA";
+  const empresaOk = (extra = {}) =>
+    montar({
+      lista: [{ nome: N, cnpj: CNPJ }],
+      sn: [CNPJ],
+      pastas: [{ nome: N, arquivos: [arquivo("a1", "contrato social.pdf", textoContrato(N, CNPJ))] }],
+      ...extra,
+    });
+
+  it("pula o CNPJ que já existe em clientes, sem enviar nem sobrescrever", async () => {
+    const c = empresaOk({ existentes: [CNPJ] });
+
+    const r = await executarImportacao(c.portas, {});
+
+    expect(r.puladas).toEqual([CNPJ]);
+    expect(r.carregadas).toEqual([]);
+    expect(c.enviados).toEqual([]);
+  });
+
+  it("carrega uma vez só o CNPJ repetido na lista", async () => {
+    const c = empresaOk({
+      lista: [
+        { nome: N, cnpj: CNPJ },
+        { nome: "ACME COMERCIO LTDA ", cnpj: CNPJ },
+      ],
+    });
+
+    const r = await executarImportacao(c.portas, {});
+
+    expect(r.carregadas).toHaveLength(1);
+    expect(c.clientes).toHaveLength(1);
+  });
+
+  it("separa as pessoas físicas (documento que não é CNPJ) e não tenta casar pasta", async () => {
+    const c = empresaOk({ lista: [{ nome: "JOAO DA SILVA", cnpj: "12345678901" }, { nome: N, cnpj: CNPJ }] });
+
+    const r = await executarImportacao(c.portas, {});
+
+    expect(r.pessoasFisicas).toEqual([{ nome: "JOAO DA SILVA", documento: "12345678901" }]);
+    expect(r.falhas).toEqual([]);
+    expect(r.carregadas).toHaveLength(1);
+  });
+
+  it("recusa CNPJ com dígito verificador inválido antes de tocar o Storage", async () => {
+    const ruim = CNPJ.slice(0, 13) + (CNPJ.endsWith("1") ? "2" : "1");
+    const c = empresaOk({ lista: [{ nome: N, cnpj: ruim }], sn: [ruim] });
+
+    const r = await executarImportacao(c.portas, {});
+
+    expect(r.falhas).toEqual([{ cnpj: ruim, nome: N, etapa: "cnpj", motivo: "CNPJ da lista inválido" }]);
+    expect(c.enviados).toEqual([]);
+  });
+
+  it("remove os arquivos enviados quando a gravação do cliente falha", async () => {
+    const c = empresaOk({ criarCliente: "falha" });
+
+    const r = await executarImportacao(c.portas, {});
+
+    expect(r.falhas).toEqual([{ cnpj: CNPJ, nome: N, etapa: "cadastro", motivo: "RPC fora do ar" }]);
+    expect(c.removidos).toEqual(c.enviados.map((e) => e.caminho));
+  });
+
+  it("não apaga os arquivos quando a resposta se perdeu mas o cliente foi gravado", async () => {
+    const c = empresaOk({ criarCliente: "resposta-perdida" });
+
+    const r = await executarImportacao(c.portas, {});
+
+    expect(r.carregadas).toHaveLength(1);
+    expect(c.removidos).toEqual([]);
+  });
 });

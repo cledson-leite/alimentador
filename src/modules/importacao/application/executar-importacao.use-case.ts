@@ -9,6 +9,7 @@ import {
   raiz,
   tipoDoDocumento,
 } from "../domain/documento";
+import { cnpjValido } from "../domain/cnpj";
 import { pastaPorNomeExato } from "../domain/pasta";
 import { resolverRegime } from "../domain/regime";
 
@@ -27,6 +28,8 @@ export type Resultado = {
   carregadas: Carregada[];
   falhas: Falha[];
   regimeAConfirmar: { cnpj: string; nome: string }[];
+  pessoasFisicas: { nome: string; documento: string }[];
+  puladas: string[];
 };
 
 type Lido = { arquivo: ArquivoDocumento; texto: string; tipo: "contrato" | "alteracao" };
@@ -47,15 +50,27 @@ export async function executarImportacao(portas: Portas, _opcoes: Record<string,
   const sn = await portas.planilhas.lerSn();
   const tributario = await portas.planilhas.lerTributario();
   const pastas = await portas.documentos.listarPastas();
-  const resultado: Resultado = { carregadas: [], falhas: [], regimeAConfirmar: [] };
+  const resultado: Resultado = { carregadas: [], falhas: [], regimeAConfirmar: [], pessoasFisicas: [], puladas: [] };
 
+  const vistos = new Set<string>();
   for (const linha of lista) {
+    if (!/^\d{14}$/.test(linha.cnpj)) {
+      resultado.pessoasFisicas.push({ nome: linha.nome, documento: linha.cnpj });
+      continue;
+    }
+    if (vistos.has(linha.cnpj)) continue;
+    vistos.add(linha.cnpj);
     const regime = resolverRegime(linha.cnpj, sn, tributario);
     if (!regime) {
       resultado.regimeAConfirmar.push({ cnpj: linha.cnpj, nome: linha.nome });
       continue;
     }
     try {
+      if (!cnpjValido(linha.cnpj)) throw new FalhaDeEmpresa("cnpj", "CNPJ da lista inválido");
+      if (await portas.cadastro.existe(linha.cnpj)) {
+        resultado.puladas.push(linha.cnpj);
+        continue;
+      }
       const empresa = await carregar(portas, linha.cnpj, regime, pastaPorNomeExato(linha.nome, pastas));
       resultado.carregadas.push({ cnpj: linha.cnpj, empresa, regime });
     } catch (e) {
@@ -101,17 +116,24 @@ async function carregar(
     return caminho;
   };
 
-  const contratoCaminho = await subir("contrato-social", (contrato ?? alteracoes.at(-1)!.lido).arquivo);
-  const itens = [];
-  for (const a of alteracoes) {
-    itens.push({
-      id: randomUUID(),
-      numero: a.numero,
-      data: a.data,
-      arquivoCaminho: await subir("alteracoes-contratuais", a.lido.arquivo),
-    });
+  try {
+    const contratoCaminho = await subir("contrato-social", (contrato ?? alteracoes.at(-1)!.lido).arquivo);
+    const itens = [];
+    for (const a of alteracoes) {
+      itens.push({
+        id: randomUUID(),
+        numero: a.numero,
+        data: a.data,
+        arquivoCaminho: await subir("alteracoes-contratuais", a.lido.arquivo),
+      });
+    }
+    await portas.cadastro.criarCliente({ id, empresa, cnpj, regime, contratoSocialCaminho: contratoCaminho, alteracoes: itens });
+  } catch (e) {
+    // Resposta perdida: se o cliente foi gravado, os arquivos são dele e não se apaga nada.
+    if (await portas.cadastro.existe(cnpj)) return empresa;
+    await portas.cadastro.remover(enviados);
+    throw new FalhaDeEmpresa("cadastro", e instanceof Error ? e.message : String(e));
   }
-  await portas.cadastro.criarCliente({ id, empresa, cnpj, regime, contratoSocialCaminho: contratoCaminho, alteracoes: itens });
   return empresa;
 }
 

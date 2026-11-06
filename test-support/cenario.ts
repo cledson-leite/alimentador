@@ -39,6 +39,7 @@ export type Cenario = {
   tributario?: Record<string, "lucro_presumido" | "lucro_real">;
   pastas?: (Pasta & { arquivos: (ArquivoDocumento & { texto: string })[] })[];
   existentes?: string[];
+  criarCliente?: "falha" | "resposta-perdida";
 };
 
 export function montar(c: Cenario) {
@@ -60,10 +61,14 @@ export function montar(c: Cenario) {
   };
   const leitor: LeitorPort = { lerTexto: async (a) => textos.get(a.id) ?? null };
   const cadastro: CadastroPort = {
-    existe: async (cnpj) => existentes.has(cnpj),
+    existe: async (cnpj) => existentes.has(cnpj) || clientes.some((x) => x.cnpj === cnpj),
     enviar: async (caminho, origem) => void enviados.push({ caminho, origemId: origem.id }),
     remover: async (caminhos) => void removidos.push(...caminhos),
-    criarCliente: async (dados) => void clientes.push(dados as unknown as Record<string, unknown>),
+    criarCliente: async (dados) => {
+      if (c.criarCliente === "falha") throw new Error("RPC fora do ar");
+      clientes.push(dados as unknown as Record<string, unknown>);
+      if (c.criarCliente === "resposta-perdida") throw new Error("timeout");
+    },
   };
   return { portas: { planilhas, documentos, leitor, cadastro }, enviados, removidos, clientes };
 }
