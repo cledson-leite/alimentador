@@ -76,6 +76,25 @@ export function montar(c: Cenario) {
   return { portas: { planilhas, documentos, leitor, cadastro }, enviados, removidos, clientes };
 }
 
+/** Alteração com a linha de data como nos contratos reais, seguida do bloco de assinaturas dos sócios. */
+export function textoAlteracaoReal(nome: string, cnpj: string, ordinal: string, linhaData: string): string {
+  return [
+    `${ordinal} ALTERAÇÃO DE CONTRATO SOCIAL`,
+    nome,
+    `“${nome}”, estabelecida à Rua das Flores, nº 10, inscrita no CNPJ sob o nº ${formatarCnpj(cnpj)}.`,
+    "E por estar assim justo e decidido, lavra, data e assina o presente instrumento elaborado em via única,",
+    "para que valha na melhor forma do direito, sendo destinada ao registro e arquivamento na Junta Comercial.",
+    linhaData,
+    "ANDRÉ LUIZ DE SOUZA",
+    "assinado por Certificado Digital",
+    "MARIA APARECIDA DE SOUZA",
+    "assinado por Certificado Digital",
+    "Junta Comercial do Estado do Paraná",
+    "Certifico o registro sob o nº 20261234567 em 12/03/2026",
+    "Protocolo 261234567 - Página 1/2",
+  ].join("\n");
+}
+
 export function textoAlteracao(nome: string, cnpj: string | undefined, ordinal: string, dataExtenso?: string): string {
   return [
     `${ordinal} ALTERAÇÃO DE CONTRATO SOCIAL`,

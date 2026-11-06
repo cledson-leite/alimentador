@@ -49,20 +49,21 @@ export function numeroDoNome(nomeArquivo: string): number | null {
 }
 
 const MESES = ["janeiro", "fevereiro", "marco", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
-const LINHA_DATA = /^[^,]+,\s*[A-Z]{2}\.?,\s*(\d{1,2})\s*[º°]?\s*de\s+([a-zçã]+)\s+de\s+(\d{4})/i;
+/**
+ * Linha inteira de data: "Cascavel/PR, 20 de fevereiro de 2026." (UF com barra, hífen, parênteses, ponto ou
+ * ausente), ou só "20 de fevereiro de 2026.". Só vale a linha que termina na data; mês no meio de frase não conta.
+ */
+const LINHA_DATA = new RegExp(`^(?:[^\\d]{2,60}?\\s*)?(\\d{1,2})\\s*[º°o]?\\s+de\\s+(${MESES.join("|")})\\s+de\\s+(\\d{4})\\s*\\.?$`, "i");
 
-/** Datas candidatas ("Cidade, UF, dia de mês de ano") nas últimas linhas antes da assinatura digital. */
+/**
+ * A data da alteração é a última linha de data do documento: depois dela só vêm o bloco de assinaturas
+ * dos sócios e o carimbo da Junta, que não têm esse formato. Devolve no máximo uma data (ISO).
+ */
 export function datasFinais(texto: string): string[] {
-  const linhas = texto.split("\n").map((l) => l.trim()).filter(Boolean);
-  const assinatura = linhas.findIndex((l) => /assinad[oa] digitalmente|assinatura digital/i.test(l));
-  const corpo = assinatura >= 0 ? linhas.slice(0, assinatura) : linhas;
-  const datas = new Set<string>();
-  for (const l of corpo.slice(-5)) {
-    const m = semAcento(l).match(LINHA_DATA);
-    const mes = m ? MESES.indexOf(m[2]!.toLowerCase()) : -1;
-    if (m && mes >= 0) {
-      datas.add(`${m[3]}-${String(mes + 1).padStart(2, "0")}-${m[1]!.padStart(2, "0")}`);
-    }
+  const linhas = texto.split("\n").map((l) => semAcento(l.trim())).filter(Boolean);
+  for (const l of linhas.reverse()) {
+    const m = l.match(LINHA_DATA);
+    if (m) return [`${m[3]}-${String(MESES.indexOf(m[2]!.toLowerCase()) + 1).padStart(2, "0")}-${m[1]!.padStart(2, "0")}`];
   }
-  return [...datas];
+  return [];
 }

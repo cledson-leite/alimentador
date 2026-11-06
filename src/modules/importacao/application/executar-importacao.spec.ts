@@ -1,4 +1,4 @@
-import { arquivo, cnpjValido, montar, textoAlteracao, textoContrato } from "../../../../test-support/cenario";
+import { arquivo, cnpjValido, montar, textoAlteracao, textoAlteracaoReal, textoContrato } from "../../../../test-support/cenario";
 
 import { executarImportacao } from "./executar-importacao.use-case";
 
@@ -493,5 +493,39 @@ describe("executarImportacao", () => {
 
     expect(r.carregadas.map((x) => x.cnpj)).toEqual([outro]);
     expect(r.falhas).toEqual([]);
+  });
+
+  describe("linha de data da alteração como nos contratos reais", () => {
+    it.each([
+      ["Cascavel/PR, 20 de fevereiro de 2026."],
+      ["Cascavel/PR 20 de fevereiro de 2026."],
+      ["Cascavel - PR, 20 de fevereiro de 2026."],
+      ["Cascavel (PR), 20 de fevereiro de 2026."],
+      ["Cascavel-Pr. 20 de fevereiro de 2026."],
+      ["Cascavel, Pr., 20 de fevereiro de 2026."],
+      ["Cascavel, 20 de fevereiro de 2026."],
+      ["20 de fevereiro de 2026."],
+      ["Cascavel/PR, 20 de Fevereiro de 2026"],
+    ])("lê a data em %s mesmo com o bloco de assinaturas depois", async (linha) => {
+      const c = montar({
+        lista: [{ nome: N, cnpj: CNPJ }],
+        sn: [CNPJ],
+        pastas: [
+          {
+            nome: N,
+            arquivos: [
+              arquivo("a0", "contrato social.pdf", textoContrato(N, CNPJ)),
+              arquivo("a1", "1 alteracao.pdf", textoAlteracaoReal(N, CNPJ, "PRIMEIRA", linha)),
+            ],
+          },
+        ],
+      });
+
+      const r = await executarImportacao(c.portas, {});
+
+      expect(r.falhas).toEqual([]);
+      const cliente = c.clientes[0] as { alteracoes: { data: string }[] };
+      expect(cliente.alteracoes.map((a) => a.data)).toEqual(["2026-02-20"]);
+    });
   });
 });
