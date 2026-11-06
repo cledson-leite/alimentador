@@ -73,6 +73,11 @@ function classificar(texto: string): Classificacao {
   // com cláusulas: o protocolo da Junta lista eventos como "ALTERAÇÃO/CONSOLIDAÇÃO DE CONTRATO/ESTATUTO" sem ser um.
   const temClausulas = /\bCLAUSULAS?\b/.test(todas.join(" "));
   const iAlteracao = janela.findIndex((_, i) => TITULO_DE_ALTERACAO.test(todas.slice(i, i + 3).join(" ")));
+  // Requerimento da Junta (e a "CAPA DO REQUERIMENTO") é o pacote de protocolo, não o instrumento: o título decide.
+  // Se "CAPA"/"REQUERIMENTO" abre o documento antes de qualquer título de alteração, é requerimento. O nome do arquivo
+  // não conta: "segunda alt REQUERIMENTO..." é alteração quando o conteúdo abre pelo título de alteração.
+  const iRequerimento = todas.slice(0, 3).findIndex((l) => /^(?:CAPA\b|REQUERIMENTO\b)/.test(l));
+  if (iRequerimento >= 0 && (iAlteracao < 0 || iRequerimento <= iAlteracao)) return resultado("outro");
   if (iAlteracao >= 0 && (iAlteracao < 3 || temClausulas)) return resultado("alteracao", iAlteracao);
   // CLÁUSULA separa instrumento de verdade de página de portal, e-mail ou manual que só citam "alteração".
   const topo = todas.slice(0, 8).join(" ");

@@ -680,6 +680,20 @@ describe("executarImportacao", () => {
           "007 Alteração de capital social e/ou Quadro Societário",
         ].join("\n"),
       ],
+      [
+        "capa do requerimento da Junta (pacote de protocolo)",
+        [
+          "CAPA DO REQUERIMENTO",
+          "DADOS CADASTRAIS",
+          "CONTROLE INTERNET",
+          "ATO",
+          "Transferência de Sede; Consolidação da Matriz; Inclusão/Alteração de Integrantes",
+          "Motivos: a) Alteração do endereço da empresa; b) Consolidação Contratual",
+          "CLÁUSULA PRIMEIRA: a presente alteração contratual será registrada",
+          "Cascavel/PR, 20 de fevereiro de 2026.",
+        ].join("\n"),
+      ],
+      ["requerimento da Junta sem a palavra capa", "REQUERIMENTO DE EMPRESÁRIO\nALTERAÇÃO CONTRATUAL\nCLÁUSULA PRIMEIRA: pedido de registro\nCascavel/PR, 20 de fevereiro de 2026."],
       ["pedido de alteração cadastral", "Cadastro de Contribuintes - Comprovante do Pedido\nNatureza do Pedido: Alteração contratual de Inscrição Estadual"],
       ["orientação interna", "Alterações para rodar em 03/2026\n* Alteração contratual - VIA BR INFORMATICA LTDA\nAlterar razão social para: ACME LTDA"],
     ])("ignora %s que cita 'alteração contratual' mas não é o instrumento, sem bloquear a empresa", async (_caso, texto) => {
