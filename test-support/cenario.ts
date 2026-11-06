@@ -1,0 +1,69 @@
+import type {
+  CadastroPort,
+  DocumentosPort,
+  LeitorPort,
+  PlanilhasPort,
+  ArquivoDocumento,
+  Pasta,
+} from "@/modules/importacao/application/ports/portas";
+
+export function cnpjValido(base12: string): string {
+  const calc = (n: string, pesos: number[]) => {
+    const soma = [...n].reduce((s, d, i) => s + Number(d) * pesos[i]!, 0);
+    const r = soma % 11;
+    return r < 2 ? 0 : 11 - r;
+  };
+  const d1 = calc(base12, [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
+  const d2 = calc(base12 + d1, [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
+  return `${base12}${d1}${d2}`;
+}
+
+export function formatarCnpj(c: string): string {
+  return `${c.slice(0, 2)}.${c.slice(2, 5)}.${c.slice(5, 8)}/${c.slice(8, 12)}-${c.slice(12)}`;
+}
+
+export function textoContrato(nome: string, cnpj?: string): string {
+  return [
+    "CONTRATO SOCIAL",
+    `A sociedade girará sob o nome empresarial ${nome}${cnpj ? `, inscrita no CNPJ sob o nº ${formatarCnpj(cnpj)}` : ""}.`,
+  ].join("\n");
+}
+
+export function arquivo(id: string, nome: string, texto: string): ArquivoDocumento & { texto: string } {
+  return { id, nome, formato: "pdf", texto };
+}
+
+export type Cenario = {
+  lista?: { nome: string; cnpj: string }[];
+  sn?: string[];
+  tributario?: Record<string, "lucro_presumido" | "lucro_real">;
+  pastas?: (Pasta & { arquivos: (ArquivoDocumento & { texto: string })[] })[];
+  existentes?: string[];
+};
+
+export function montar(c: Cenario) {
+  const textos = new Map<string, string>();
+  for (const p of c.pastas ?? []) for (const a of p.arquivos) textos.set(a.id, a.texto);
+
+  const enviados: { caminho: string; origemId: string }[] = [];
+  const removidos: string[] = [];
+  const clientes: Record<string, unknown>[] = [];
+  const existentes = new Set(c.existentes ?? []);
+
+  const planilhas: PlanilhasPort = {
+    lerLista: async () => c.lista ?? [],
+    lerSn: async () => new Set(c.sn ?? []),
+    lerTributario: async () => new Map(Object.entries(c.tributario ?? {})),
+  };
+  const documentos: DocumentosPort = {
+    listarPastas: async () => (c.pastas ?? []).map(({ nome, arquivos }) => ({ nome, arquivos })),
+  };
+  const leitor: LeitorPort = { lerTexto: async (a) => textos.get(a.id) ?? null };
+  const cadastro: CadastroPort = {
+    existe: async (cnpj) => existentes.has(cnpj),
+    enviar: async (caminho, origem) => void enviados.push({ caminho, origemId: origem.id }),
+    remover: async (caminhos) => void removidos.push(...caminhos),
+    criarCliente: async (dados) => void clientes.push(dados as unknown as Record<string, unknown>),
+  };
+  return { portas: { planilhas, documentos, leitor, cadastro }, enviados, removidos, clientes };
+}
