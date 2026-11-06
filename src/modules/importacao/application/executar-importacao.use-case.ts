@@ -153,9 +153,20 @@ function numerar(alteracoes: Lido[]) {
     if (datas[0]! > hoje()) throw new FalhaDeEmpresa("data", "data da alteração no futuro");
     return { lido, data: datas[0]!, numero: numeroDoConteudo(lido.texto) ?? numeroDoNome(lido.arquivo.nome) };
   });
-  const semNumero = datados.filter((d) => d.numero === null);
+  // A mesma alteração costuma estar na pasta em mais de um formato (PDF e DOC): mesmo número e mesma data
+  // é um documento só, e vale o formato de melhor leitura. Mesmo número com datas diferentes segue sendo falha.
+  const melhorFormato = ["pdf", "docx", "doc", "imagem"];
+  const unicos = new Map<string, (typeof datados)[number]>();
+  for (const d of datados) {
+    const chave = `${d.numero ?? "sem-numero"}|${d.data}`;
+    const atual = unicos.get(chave);
+    if (!atual || melhorFormato.indexOf(d.lido.arquivo.formato) < melhorFormato.indexOf(atual.lido.arquivo.formato)) {
+      unicos.set(chave, d);
+    }
+  }
+  const semNumero = [...unicos.values()].filter((d) => d.numero === null);
   if (semNumero.length > 1) throw new FalhaDeEmpresa("numero", "mais de uma alteração sem número");
-  const numerados = datados
+  const numerados = [...unicos.values()]
     .map((d) => ({ ...d, numero: d.numero ?? 1 }))
     .sort((a, b) => a.numero - b.numero);
   numerados.forEach((d, i) => {

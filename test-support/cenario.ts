@@ -32,8 +32,13 @@ export function textoContrato(nome: string, cnpj?: string): string {
   ].join("\n");
 }
 
-export function arquivo(id: string, nome: string, texto: string): ArquivoDocumento & { texto: string } {
-  return { id, nome, formato: "pdf", texto };
+export function arquivo(
+  id: string,
+  nome: string,
+  texto: string,
+  formato: ArquivoDocumento["formato"] = "pdf",
+): ArquivoDocumento & { texto: string } {
+  return { id, nome, formato, texto };
 }
 
 export type Cenario = {

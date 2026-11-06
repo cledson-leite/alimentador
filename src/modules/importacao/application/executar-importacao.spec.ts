@@ -495,6 +495,46 @@ describe("executarImportacao", () => {
     expect(r.falhas).toEqual([]);
   });
 
+  describe("a mesma alteração em mais de um arquivo", () => {
+    const montarComCopias = (textoDaCopia: string) =>
+      montar({
+        lista: [{ nome: N, cnpj: CNPJ }],
+        sn: [CNPJ],
+        pastas: [
+          {
+            nome: N,
+            arquivos: [
+              arquivo("a0", "contrato social.pdf", textoContrato(N, CNPJ)),
+              arquivo("a1", "1 alteracao.doc", textoAlteracao(N, CNPJ, "PRIMEIRA", "10 de maio de 2022"), "doc"),
+              arquivo("a2", "1 alteracao.pdf", textoDaCopia),
+            ],
+          },
+        ],
+      });
+
+    it("trata PDF e DOC com o mesmo número e a mesma data como um documento só, mantendo o PDF", async () => {
+      const c = montarComCopias(textoAlteracao(N, CNPJ, "PRIMEIRA", "10 de maio de 2022"));
+
+      const r = await executarImportacao(c.portas, {});
+
+      expect(r.falhas).toEqual([]);
+      const cliente = c.clientes[0] as { alteracoes: { numero: number }[] };
+      expect(cliente.alteracoes.map((a) => a.numero)).toEqual([1]);
+      expect(c.enviados.map((e) => e.origemId).sort()).toEqual(["a0", "a2"]);
+    });
+
+    it("continua falhando quando o mesmo número aparece com datas diferentes", async () => {
+      const c = montarComCopias(textoAlteracao(N, CNPJ, "PRIMEIRA", "11 de maio de 2022"));
+
+      const r = await executarImportacao(c.portas, {});
+
+      expect(r.falhas).toEqual([
+        { cnpj: CNPJ, nome: N, etapa: "numero", motivo: "número de alteração repetido" },
+      ]);
+      expect(c.enviados).toEqual([]);
+    });
+  });
+
   describe("linha de data da alteração como nos contratos reais", () => {
     it.each([
       ["Cascavel/PR, 20 de fevereiro de 2026."],
