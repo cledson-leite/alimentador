@@ -21,6 +21,8 @@ export type Portas = {
   documentos: DocumentosPort;
   leitor: LeitorPort;
   cadastro: CadastroPort;
+  /** Pasta aceita por empresa no download (CNPJ → nome da pasta). Opcional. */
+  pastaPorCnpj?: Map<string, string>;
 };
 
 export type Falha = { cnpj: string; nome: string; etapa: string; motivo: string };
@@ -76,7 +78,11 @@ export async function executarImportacao(portas: Portas, opcoes: OpcoesImportaca
         resultado.puladas.push(linha.cnpj);
         continue;
       }
-      const empresa = await carregar(portas, linha.cnpj, regime, casarPasta(linha.nome, pastas));
+      // A pasta que o download aceitou (refinada com o usuário, inclusive candidatas confirmadas) vale mais
+      // que o casamento por nome; sem ela, vale a regra estrita. O CNPJ do contrato segue sendo a prova final.
+      const aceita = pastas.find((p) => p.nome === portas.pastaPorCnpj?.get(linha.cnpj));
+      const casamento: Casamento<(typeof pastas)[number]> = aceita ? { tipo: "unica", pasta: aceita } : casarPasta(linha.nome, pastas);
+      const empresa = await carregar(portas, linha.cnpj, regime, casamento);
       resultado.carregadas.push({ cnpj: linha.cnpj, empresa, regime });
     } catch (e) {
       if (!(e instanceof FalhaDeEmpresa)) throw e;

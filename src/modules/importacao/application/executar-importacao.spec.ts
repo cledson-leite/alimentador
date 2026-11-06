@@ -658,6 +658,45 @@ describe("executarImportacao", () => {
     });
   });
 
+  describe("pasta aceita no download (ticket 03)", () => {
+    const base = (extra = {}) =>
+      montar({
+        lista: [{ nome: "TEXEIRA COMERCIO LTDA", cnpj: CNPJ }],
+        sn: [CNPJ],
+        pastas: [{ nome: "TEIXEIRA COMERCIO LTDA", arquivos: [arquivo("a1", "cs.pdf", textoContrato("TEIXEIRA COMERCIO LTDA", CNPJ))] }],
+        ...extra,
+      });
+
+    it("usa a pasta que o download aceitou, mesmo que o nome da lista não case pelas regras", async () => {
+      const c = base({ pastaPorCnpj: { [CNPJ]: "TEIXEIRA COMERCIO LTDA" } });
+
+      const r = await executarImportacao(c.portas, {});
+
+      expect(r.falhas).toEqual([]);
+      expect(r.carregadas.map((x) => x.empresa)).toEqual(["TEIXEIRA COMERCIO LTDA"]);
+    });
+
+    it("sem a pasta no mapeamento, segue valendo a regra estrita (e não aproxima por semelhança)", async () => {
+      const r = await executarImportacao(base().portas, {});
+
+      expect(r.falhas[0]).toMatchObject({ etapa: "pasta", motivo: "pasta não encontrada" });
+    });
+
+    it("mesmo com a pasta mapeada, o CNPJ do contrato continua sendo a prova final", async () => {
+      const outro = cnpjValido("998887770001");
+      const c = montar({
+        lista: [{ nome: "TEXEIRA COMERCIO LTDA", cnpj: CNPJ }],
+        sn: [CNPJ],
+        pastas: [{ nome: "TEIXEIRA COMERCIO LTDA", arquivos: [arquivo("a1", "cs.pdf", textoContrato("TEIXEIRA COMERCIO LTDA", outro))] }],
+        pastaPorCnpj: { [CNPJ]: "TEIXEIRA COMERCIO LTDA" },
+      });
+
+      const r = await executarImportacao(c.portas, {});
+
+      expect(r.falhas[0]).toMatchObject({ etapa: "cnpj", motivo: "CNPJ do documento diverge da lista" });
+    });
+  });
+
   describe("a mesma alteração em mais de um arquivo", () => {
     const montarComCopias = (textoDaCopia: string) =>
       montar({

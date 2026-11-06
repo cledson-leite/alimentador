@@ -48,6 +48,8 @@ export type Cenario = {
   pastas?: (Pasta & { arquivos: (ArquivoDocumento & { texto: string })[] })[];
   existentes?: string[];
   criarCliente?: "falha" | "resposta-perdida";
+  /** Pasta aceita por empresa no download (ticket 03): CNPJ → nome da pasta. */
+  pastaPorCnpj?: Record<string, string>;
 };
 
 export function montar(c: Cenario) {
@@ -78,7 +80,8 @@ export function montar(c: Cenario) {
       if (c.criarCliente === "resposta-perdida") throw new Error("timeout");
     },
   };
-  return { portas: { planilhas, documentos, leitor, cadastro }, enviados, removidos, clientes };
+  const pastaPorCnpj = c.pastaPorCnpj ? new Map(Object.entries(c.pastaPorCnpj)) : undefined;
+  return { portas: { planilhas, documentos, leitor, cadastro, pastaPorCnpj }, enviados, removidos, clientes };
 }
 
 /** Alteração com a linha de data como nos contratos reais, seguida do bloco de assinaturas dos sócios. */

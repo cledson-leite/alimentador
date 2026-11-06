@@ -1,4 +1,4 @@
-import { readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
 
 import { createClient } from "@supabase/supabase-js";
@@ -10,6 +10,7 @@ import { cadastroSupabase, conferirSchema } from "../modules/importacao/infra/ca
 import { documentosDoDisco } from "../modules/importacao/infra/documentos.adapter";
 import { leitorDeArquivos } from "../modules/importacao/infra/leitor.adapter";
 import { planilhasXlsx } from "../modules/importacao/infra/planilhas.adapter";
+import { pastaPorCnpjDoEstado } from "../modules/importacao/infra/estado-final.parser";
 import { escreverSaidas } from "../modules/importacao/infra/saidas.csv";
 
 import { lerOpcoes } from "./opcoes";
@@ -22,6 +23,11 @@ const SEM_EFEITO: CadastroPort = {
   remover: async () => {},
   criarCliente: async () => {},
 };
+
+/** Pasta aceita por empresa no download, se o estado final existir; sem ele, vale só a regra de casamento. */
+function lerPastaPorCnpj(arquivo: string): Map<string, string> | undefined {
+  return existsSync(arquivo) ? pastaPorCnpjDoEstado(readFileSync(arquivo, "utf-8")) : undefined;
+}
 
 async function principal() {
   const op = lerOpcoes(process.argv.slice(2));
@@ -52,6 +58,7 @@ async function principal() {
       documentos: documentosDoDisco(op.documentos, manifestos),
       leitor: leitorDeArquivos(),
       cadastro,
+      pastaPorCnpj: lerPastaPorCnpj(`${op.documentos}/_estado-final.csv`),
     },
     { cnpjs: op.cnpjs },
   );
