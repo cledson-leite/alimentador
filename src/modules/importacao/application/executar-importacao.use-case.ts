@@ -146,6 +146,14 @@ async function desempatar(portas: Portas, cnpj: string, pastas: { arquivos: Arqu
   );
 }
 
+/** Razão social na lista, sem as anotações do escritório ("- empresa", "inicia na Rigoni em...", "- MATRIZ", "- FILIAL X"). */
+function razaoSocialDaLista(nome: string): string {
+  return nome
+    .replace(/\s+-\s+(?:empresa|responsabilid\w*|baixad\w*|n[aã]o falar.*|antig\w*|matriz|filial\b.*|inicia\b.*|incia\b.*)$/i, "")
+    .replace(/\s+inicia\b.*$/i, "")
+    .trim();
+}
+
 /**
  * O CNPJ da lista precisa aparecer nos documentos: contrato e alteração podem citar a matriz (vale a raiz de 8 dígitos),
  * mas o comprovante de CNPJ é do próprio estabelecimento e exige o número idêntico (filial é outra empresa).
@@ -178,16 +186,17 @@ async function carregar(
     );
   }
 
-  const prova = provaDoCnpj(lidos, cnpj);
-  if (prova === "ausente") throw new FalhaDeEmpresa("cnpj", "nenhum documento traz CNPJ");
-  if (prova === "diverge") throw new FalhaDeEmpresa("cnpj", "CNPJ do documento diverge da lista");
+  // A empresa está na lista, com CNPJ e razão social, tem regime nas planilhas e pasta no Drive: o CNPJ da lista vale.
+  // Documento sem CNPJ não reprova (contrato de constituição costuma não trazê-lo); só um CNPJ DIFERENTE reprova.
+  if (provaDoCnpj(lidos, cnpj) === "diverge") throw new FalhaDeEmpresa("cnpj", "CNPJ do documento diverge da lista");
 
   const contrato = lidos.find((l) => l.tipo === "contrato");
   const comprovante = lidos.find((l) => l.tipo === "cnpj");
   const doInstrumento = contrato ?? lidos.find((l) => l.tipo === "alteracao");
   const nomeDoDocumento =
-    (doInstrumento && nomeEmpresarial(doInstrumento.texto)) || (comprovante && nomeDoComprovante(comprovante.texto)) || null;
-  if (!nomeDoDocumento) throw new FalhaDeEmpresa("nome", "nome da empresa não encontrado no documento");
+    (doInstrumento && nomeEmpresarial(doInstrumento.texto)) ||
+    (comprovante && nomeDoComprovante(comprovante.texto)) ||
+    razaoSocialDaLista(nomeLista);
   // Filial é outra empresa, com CNPJ próprio: o nome é "EMPRESA - FILIAL X" (o trecho da filial vem da lista).
   const filial = cnpj.slice(8, 12) !== "0001" ? nomeLista.match(/\bfilial\b.*$/i)?.[0] : undefined;
   const empresa = filial ? `${nomeDoDocumento} - ${filial.toUpperCase()}` : nomeDoDocumento;

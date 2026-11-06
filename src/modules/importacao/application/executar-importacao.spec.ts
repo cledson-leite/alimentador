@@ -161,7 +161,7 @@ describe("executarImportacao", () => {
     expect(r.carregadas).toEqual([{ cnpj: filial, empresa: "ACME COMERCIO LTDA", regime: "simples_nacional" }]);
   });
 
-  it("manda para falhas a empresa cujos documentos não trazem nenhum CNPJ", async () => {
+  it("carrega a empresa cujo contrato não traz CNPJ: o CNPJ da lista (já validado pelas planilhas) é o que vale", async () => {
     const c = montar({
       lista: [{ nome: "ACME COMERCIO LTDA", cnpj: CNPJ }],
       sn: [CNPJ],
@@ -175,11 +175,28 @@ describe("executarImportacao", () => {
 
     const r = await executarImportacao(c.portas, {});
 
-    expect(r.carregadas).toEqual([]);
-    expect(r.falhas).toEqual([
-      { cnpj: CNPJ, nome: "ACME COMERCIO LTDA", etapa: "cnpj", motivo: "nenhum documento traz CNPJ" },
-    ]);
-    expect(c.enviados).toEqual([]);
+    expect(r.falhas).toEqual([]);
+    expect(r.carregadas).toEqual([{ cnpj: CNPJ, empresa: "ACME COMERCIO LTDA", regime: "simples_nacional" }]);
+    expect(c.clientes[0]).toMatchObject({ cnpj: CNPJ, empresa: "ACME COMERCIO LTDA" });
+    expect(c.enviados.map((e) => e.origemId)).toEqual(["a1"]);
+  });
+
+  it("usa a razão social da lista quando o nome não sai do documento (sem as anotações do escritório)", async () => {
+    const c = montar({
+      lista: [{ nome: "ACME COMERCIO LTDA - inicia na Rigoni em 22/01/2026", cnpj: CNPJ }],
+      sn: [CNPJ],
+      pastas: [
+        {
+          nome: "ACME COMERCIO LTDA - inicia na Rigoni em 22/01/2026",
+          arquivos: [arquivo("a1", "contrato social.pdf", "CONTRATO SOCIAL\nPelo presente instrumento os sócios resolvem constituir\nCLÁUSULA PRIMEIRA: capital social em quotas")],
+        },
+      ],
+    });
+
+    const r = await executarImportacao(c.portas, {});
+
+    expect(r.falhas).toEqual([]);
+    expect(r.carregadas.map((x) => x.empresa)).toEqual(["ACME COMERCIO LTDA"]);
   });
 
   it("grava as alterações com número e data lidos do conteúdo, mais uma cópia de cada arquivo no Storage", async () => {
