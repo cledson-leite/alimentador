@@ -9,6 +9,7 @@ import { validarAmbiente } from "../modules/importacao/domain/ambiente";
 import { cadastroSupabase, conferirSchema } from "../modules/importacao/infra/cadastro.adapter";
 import { documentosDoDisco } from "../modules/importacao/infra/documentos.adapter";
 import { leitorDeArquivos } from "../modules/importacao/infra/leitor.adapter";
+import { leitorComOcr } from "../modules/importacao/infra/ocr.adapter";
 import { planilhasXlsx } from "../modules/importacao/infra/planilhas.adapter";
 import { pastaPorCnpjDoEstado } from "../modules/importacao/infra/estado-final.parser";
 import { escreverSaidas } from "../modules/importacao/infra/saidas.csv";
@@ -52,16 +53,19 @@ async function principal() {
     .filter((f) => /^_selecionados\d*\.json$/.test(f))
     .map((f) => `${op.documentos}/${f}`);
 
+  // OCR é local (Tesseract na própria máquina) e só roda onde a leitura normal não basta.
+  const leitor = op.semOcr ? { ...leitorDeArquivos(), encerrar: async () => {} } : leitorComOcr(leitorDeArquivos(), { cache: op.ocrCache });
   const resultado = await executarImportacao(
     {
       planilhas: planilhasXlsx({ lista: op.lista, sn: op.sn, tributario: op.tributario }),
       documentos: documentosDoDisco(op.documentos, manifestos),
-      leitor: leitorDeArquivos(),
+      leitor,
       cadastro,
       pastaPorCnpj: lerPastaPorCnpj(`${op.documentos}/_estado-final.csv`),
     },
     { cnpjs: op.cnpjs },
   );
+  await leitor.encerrar();
   await escreverSaidas(op.saida, resultado);
 
   console.log(

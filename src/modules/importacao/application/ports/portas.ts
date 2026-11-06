@@ -25,6 +25,11 @@ export interface DocumentosPort {
 export interface LeitorPort {
   /** Texto do documento, ou null quando não há texto legível. */
   lerTexto(arquivo: ArquivoDocumento): Promise<string | null>;
+  /**
+   * Leitura por OCR local, mais lenta: só é chamada quando a leitura normal não basta (escaneado, imagem ou fonte
+   * sem mapeamento). Opcional: sem ela, esses arquivos seguem como não lidos.
+   */
+  lerComOcr?(arquivo: ArquivoDocumento): Promise<string | null>;
 }
 
 export type NovoCliente = {

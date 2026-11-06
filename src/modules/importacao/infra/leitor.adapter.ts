@@ -4,9 +4,10 @@ import mammoth from "mammoth";
 import { extractText, getDocumentProxy } from "unpdf";
 import WordExtractor from "word-extractor";
 
+import { textoLegivel } from "../domain/texto";
+
 import type { ArquivoDocumento, LeitorPort } from "../application/ports/portas";
 
-const MINIMO = 20; // abaixo disso a "camada de texto" é ruído, não conteúdo
 
 async function extrair(a: ArquivoDocumento): Promise<string> {
   const caminho = a.caminho!;
@@ -32,7 +33,7 @@ export function leitorDeArquivos(): LeitorPort {
       if (!a.caminho) return null;
       try {
         const texto = (await extrair(a)).trim();
-        return texto.length >= MINIMO ? texto : null;
+        return textoLegivel(texto) ? texto : null;
       } catch {
         return null;
       }

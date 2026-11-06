@@ -4,6 +4,8 @@ export type Opcoes = {
   dryRun: boolean;
   producao: boolean;
   permitirApi: boolean;
+  semOcr: boolean;
+  ocrCache: string;
   cnpjs: string[] | undefined;
   lista: string;
   sn: string;
@@ -21,6 +23,8 @@ export function lerOpcoes(argv: string[]): Opcoes {
       "dry-run": { type: "boolean", default: false },
       producao: { type: "boolean", default: false },
       "permitir-api": { type: "boolean", default: false },
+      "sem-ocr": { type: "boolean", default: false },
+      "ocr-cache": { type: "string", default: "C:/dados/ocr-cache" },
       cnpj: { type: "string" },
       lista: { type: "string", default: `${DOWNLOADS}/lista empresas(4).xlsx` },
       sn: { type: "string", default: `${DOWNLOADS}/CONTROLE SIMPLES NACIONAL .xlsx` },
@@ -36,6 +40,8 @@ export function lerOpcoes(argv: string[]): Opcoes {
     dryRun: values["dry-run"],
     producao: values.producao,
     permitirApi: values["permitir-api"],
+    semOcr: values["sem-ocr"],
+    ocrCache: values["ocr-cache"],
     cnpjs,
     lista: values.lista,
     sn: values.sn,

@@ -1029,6 +1029,105 @@ describe("executarImportacao", () => {
     });
   });
 
+  describe("OCR local, só quando a leitura normal não basta", () => {
+    it("lê por OCR o comprovante de CNPJ ilegível e prova o CNPJ do contrato que não o traz", async () => {
+      const c = montar({
+        lista: [{ nome: N, cnpj: CNPJ }],
+        sn: [CNPJ],
+        pastas: [
+          {
+            nome: N,
+            arquivos: [
+              arquivo("a1", "0 contrato social.pdf", textoContrato(N)),
+              arquivo("a2", "0 CNPJ.pdf", "ilegivel"),
+            ],
+          },
+        ],
+        semTexto: ["a2"],
+        ocr: { a2: textoComprovanteCnpj(N, CNPJ) },
+      });
+
+      const r = await executarImportacao(c.portas, {});
+
+      expect(r.falhas).toEqual([]);
+      expect(c.ocrChamadas).toEqual(["a2"]);
+      expect(c.enviados.map((e) => e.origemId)).toEqual(["a1"]);
+    });
+
+    it("cadastra sem contrato quando só o comprovante de CNPJ existe e precisa de OCR", async () => {
+      const c = montar({
+        lista: [{ nome: N, cnpj: CNPJ }],
+        sn: [CNPJ],
+        pastas: [{ nome: N, arquivos: [arquivo("a1", "CNPJ.jpg", "x")] }],
+        semTexto: ["a1"],
+        ocr: { a1: textoComprovanteCnpj(N, CNPJ) },
+      });
+
+      const r = await executarImportacao(c.portas, {});
+
+      expect(r.falhas).toEqual([]);
+      expect(c.clientes[0]).toMatchObject({ cnpj: CNPJ, contratoSocialCaminho: null, alteracoes: [] });
+    });
+
+    it("lê por OCR um contrato escaneado e segue as mesmas regras (CNPJ, nome, data)", async () => {
+      const c = montar({
+        lista: [{ nome: N, cnpj: CNPJ }],
+        sn: [CNPJ],
+        pastas: [{ nome: N, arquivos: [arquivo("a1", "0 CONTRATO SOCIAL.pdf", "Página 1 de 3")] }],
+        semTexto: ["a1"],
+        ocr: { a1: textoContrato(N, CNPJ) },
+      });
+
+      const r = await executarImportacao(c.portas, {});
+
+      expect(r.falhas).toEqual([]);
+      expect(c.ocrChamadas).toEqual(["a1"]);
+    });
+
+    it("não chama o OCR quando a leitura normal já resolve a empresa", async () => {
+      const c = montar({
+        lista: [{ nome: N, cnpj: CNPJ }],
+        sn: [CNPJ],
+        pastas: [{ nome: N, arquivos: [arquivo("a1", "contrato social.pdf", textoContrato(N, CNPJ)), arquivo("a2", "0 CNPJ.pdf", "x")] }],
+        semTexto: ["a2"],
+        ocr: { a2: textoComprovanteCnpj(N, CNPJ) },
+      });
+
+      await executarImportacao(c.portas, {});
+
+      expect(c.ocrChamadas).toEqual([]);
+    });
+
+    it("só passa por OCR arquivo que parece relevante pelo nome (nunca RG, certidões etc.)", async () => {
+      const c = montar({
+        lista: [{ nome: N, cnpj: CNPJ }],
+        sn: [CNPJ],
+        pastas: [{ nome: N, arquivos: [arquivo("a1", "RG SOCIO.jpg", "x"), arquivo("a2", "CNH.pdf", "x")] }],
+        semTexto: ["a1", "a2"],
+        ocr: { a1: "RG", a2: "CNH" },
+      });
+
+      const r = await executarImportacao(c.portas, {});
+
+      expect(c.ocrChamadas).toEqual([]);
+      expect(r.falhas[0]).toMatchObject({ etapa: "documentos" });
+    });
+
+    it("sem OCR disponível, os arquivos ilegíveis seguem como não lidos", async () => {
+      const c = montar({
+        lista: [{ nome: N, cnpj: CNPJ }],
+        sn: [CNPJ],
+        pastas: [{ nome: N, arquivos: [arquivo("a1", "0 CNPJ.pdf", "x")] }],
+        semTexto: ["a1"],
+      });
+
+      const r = await executarImportacao(c.portas, {});
+
+      expect(r.carregadas).toEqual([]);
+      expect(r.falhas[0]).toMatchObject({ etapa: "documentos" });
+    });
+  });
+
   describe("a mesma alteração em mais de um arquivo", () => {
     const montarComCopias = (textoDaCopia: string) =>
       montar({

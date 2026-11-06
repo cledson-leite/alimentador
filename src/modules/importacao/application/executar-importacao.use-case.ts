@@ -94,25 +94,50 @@ export async function executarImportacao(portas: Portas, opcoes: OpcoesImportaca
   return resultado;
 }
 
-async function lerPasta(portas: Portas, pasta: { arquivos: ArquivoDocumento[] }): Promise<Lido[]> {
+/** Só vale a pena passar por OCR o arquivo que, pelo nome, pode ser contrato, alteração ou documento de CNPJ. */
+const parecePertinente = (nome: string) => /contrat|altera|cnpj|cartao|constitu|\bato\b|social/.test(semAcento(nome).toLowerCase());
+
+type Lida = { lidos: Lido[]; pendentes: ArquivoDocumento[] };
+
+/** Leitura normal da pasta. `pendentes` são os arquivos pertinentes sem texto legível, candidatos a OCR. */
+async function lerPasta(portas: Portas, pasta: { arquivos: ArquivoDocumento[] }): Promise<Lida> {
   const lidos: Lido[] = [];
+  const pendentes: ArquivoDocumento[] = [];
   for (const arquivo of pasta.arquivos) {
-    const texto = (await portas.leitor.lerTexto(arquivo)) ?? "";
+    const lido = await portas.leitor.lerTexto(arquivo);
+    if (lido === null && parecePertinente(arquivo.nome)) pendentes.push(arquivo);
+    const texto = lido ?? "";
     const tipo = tipoDoDocumento(texto);
     if (tipo !== "outro") lidos.push({ arquivo, texto, tipo });
   }
-  return lidos;
+  return { lidos, pendentes };
+}
+
+/**
+ * OCR local só quando a leitura normal não basta: nenhum documento reconhecido ou nenhum CNPJ no texto. Os documentos
+ * lidos assim entram na mesma classificação e passam pelas mesmas regras (CNPJ, nome, data).
+ */
+async function completarComOcr(portas: Portas, cnpj: string, { lidos, pendentes }: Lida): Promise<Lido[]> {
+  const precisa = lidos.length === 0 || provaDoCnpj(lidos, cnpj) === "ausente";
+  if (!precisa || !portas.leitor.lerComOcr) return lidos;
+  const resultado = [...lidos];
+  for (const arquivo of pendentes) {
+    const texto = await portas.leitor.lerComOcr(arquivo);
+    const tipo = texto ? tipoDoDocumento(texto) : "outro";
+    if (texto && tipo !== "outro") resultado.push({ arquivo, texto, tipo });
+  }
+  return resultado;
 }
 
 /**
  * Mais de uma pasta casou pelo nome: o conteúdo decide. Fica a pasta cujos documentos trazem o CNPJ da lista.
  * CNPJs diferentes entre as pastas são empresas diferentes; o mesmo CNPJ em mais de uma é a mesma empresa e só uma vale.
  */
-async function desempatar(portas: Portas, cnpj: string, pastas: { arquivos: ArquivoDocumento[] }[]): Promise<Lido[]> {
-  const donas: Lido[][] = [];
+async function desempatar(portas: Portas, cnpj: string, pastas: { arquivos: ArquivoDocumento[] }[]): Promise<Lida> {
+  const donas: Lida[] = [];
   for (const pasta of pastas) {
-    const lidos = await lerPasta(portas, pasta);
-    if (provaDoCnpj(lidos, cnpj) === "ok") donas.push(lidos);
+    const lida = await lerPasta(portas, pasta);
+    if (provaDoCnpj(lida.lidos, cnpj) === "ok") donas.push(lida);
   }
   if (donas.length === 1) return donas[0]!;
   throw new FalhaDeEmpresa(
@@ -142,7 +167,8 @@ async function carregar(
   casamento: Casamento<{ arquivos: ArquivoDocumento[] }>,
 ): Promise<string> {
   if (casamento.tipo === "nenhuma") throw new FalhaDeEmpresa("pasta", "pasta não encontrada");
-  const lidos = casamento.tipo === "unica" ? await lerPasta(portas, casamento.pasta) : await desempatar(portas, cnpj, casamento.pastas);
+  const lida = casamento.tipo === "unica" ? await lerPasta(portas, casamento.pasta) : await desempatar(portas, cnpj, casamento.pastas);
+  const lidos = await completarComOcr(portas, cnpj, lida);
   if (lidos.length === 0) {
     // O arquivo existe e se chama contrato/alteração, mas o texto não traz o instrumento (páginas em imagem): é caso de OCR.
     const pareceContrato = casamento.tipo === "unica" && casamento.pasta.arquivos.some((a) => /contrat|altera/i.test(semAcento(a.nome)));

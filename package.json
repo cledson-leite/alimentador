@@ -8,9 +8,11 @@
     "importar": "tsx src/main/cli.ts"
   },
   "dependencies": {
+    "@napi-rs/canvas": "^1.1.0",
     "@supabase/supabase-js": "^2.119.0",
     "mammoth": "^1.13.0",
     "read-excel-file": "^9.3.14",
+    "tesseract.js": "^7.0.0",
     "unpdf": "^2.1.0",
     "word-extractor": "^1.0.4",
     "zod": "^4.6.7"

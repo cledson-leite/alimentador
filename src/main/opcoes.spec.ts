@@ -16,6 +16,11 @@ describe("lerOpcoes", () => {
     });
   });
 
+  it("liga o OCR local por padrão e o desliga com --sem-ocr", () => {
+    expect(lerOpcoes([]).semOcr).toBe(false);
+    expect(lerOpcoes(["--sem-ocr"]).semOcr).toBe(true);
+  });
+
   it("recusa flag desconhecida em vez de ignorá-la", () => {
     expect(() => lerOpcoes(["--produçao"])).toThrow();
   });

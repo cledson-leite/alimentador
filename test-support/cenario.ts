@@ -50,6 +50,10 @@ export type Cenario = {
   criarCliente?: "falha" | "resposta-perdida";
   /** Pasta aceita por empresa no download (ticket 03): CNPJ → nome da pasta. */
   pastaPorCnpj?: Record<string, string>;
+  /** Texto que o OCR devolveria por arquivo (id → texto). Sem esta chave o leitor não tem OCR. */
+  ocr?: Record<string, string>;
+  /** Arquivos cuja leitura normal não traz texto legível (escaneado ou fonte sem mapeamento), mesmo sem OCR. */
+  semTexto?: string[];
 };
 
 export function montar(c: Cenario) {
@@ -69,7 +73,19 @@ export function montar(c: Cenario) {
   const documentos: DocumentosPort = {
     listarPastas: async () => (c.pastas ?? []).map(({ nome, arquivos }) => ({ nome, arquivos })),
   };
-  const leitor: LeitorPort = { lerTexto: async (a) => textos.get(a.id) ?? null };
+  const ocrChamadas: string[] = [];
+  const semTexto = new Set(c.semTexto ?? []);
+  const leitor: LeitorPort = {
+    lerTexto: async (a) => (semTexto.has(a.id) ? null : (textos.get(a.id) ?? null)),
+    ...(c.ocr
+      ? {
+          lerComOcr: async (a) => {
+            ocrChamadas.push(a.id);
+            return c.ocr![a.id] ?? null;
+          },
+        }
+      : {}),
+  };
   const cadastro: CadastroPort = {
     existe: async (cnpj) => existentes.has(cnpj) || clientes.some((x) => x.cnpj === cnpj),
     enviar: async (caminho, origem) => void enviados.push({ caminho, origemId: origem.id }),
@@ -81,7 +97,7 @@ export function montar(c: Cenario) {
     },
   };
   const pastaPorCnpj = c.pastaPorCnpj ? new Map(Object.entries(c.pastaPorCnpj)) : undefined;
-  return { portas: { planilhas, documentos, leitor, cadastro, pastaPorCnpj }, enviados, removidos, clientes };
+  return { portas: { planilhas, documentos, leitor, cadastro, pastaPorCnpj }, enviados, removidos, clientes, ocrChamadas };
 }
 
 /** Comprovante de Inscrição e de Situação Cadastral (cartão CNPJ), na forma do texto real. */
