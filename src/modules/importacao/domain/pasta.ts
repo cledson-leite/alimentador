@@ -52,7 +52,7 @@ const PASSOS: Passo[] = [
   (p, l) => mesmaOrdem(semForma(semPontuacao(p)), semForma(semPontuacao(l))),
 ];
 
-export type Casamento<T> = { tipo: "unica"; pasta: T } | { tipo: "nenhuma" } | { tipo: "varias" };
+export type Casamento<T> = { tipo: "unica"; pasta: T } | { tipo: "nenhuma" } | { tipo: "varias"; pastas: T[] };
 
 /** Regra estrita, em ordem; para no primeiro passo que achar. Nunca troca ordem, abrevia nem aproxima. */
 export function casarPasta<T extends { nome: string }>(nomeLista: string, pastas: T[]): Casamento<T> {
@@ -60,7 +60,7 @@ export function casarPasta<T extends { nome: string }>(nomeLista: string, pastas
   for (const passo of PASSOS) {
     const achadas = pastas.filter((p) => passo(normalizar(p.nome), lista));
     if (achadas.length === 1) return { tipo: "unica", pasta: achadas[0]! };
-    if (achadas.length > 1) return { tipo: "varias" };
+    if (achadas.length > 1) return { tipo: "varias", pastas: achadas };
   }
   return { tipo: "nenhuma" };
 }

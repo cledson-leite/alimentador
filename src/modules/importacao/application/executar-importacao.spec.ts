@@ -403,20 +403,47 @@ describe("executarImportacao", () => {
       expect(r.falhas[0]).toMatchObject({ etapa: "pasta", motivo: "pasta não encontrada" });
     });
 
-    it("manda para falhas quando duas pastas casam no mesmo passo", async () => {
-      const c = montar({
+    const duasPastas = (docA: string, docB: string) =>
+      montar({
         lista: [{ nome: "ACME COMERCIO LTDA", cnpj: CNPJ }],
         sn: [CNPJ],
         pastas: [
-          { nome: "ACME COMERCIO LTDA - empresa A", arquivos: [] },
-          { nome: "ACME COMERCIO LTDA - empresa B", arquivos: [] },
+          { nome: "ACME COMERCIO LTDA - empresa A", arquivos: [arquivo("a1", "cs.pdf", docA)] },
+          { nome: "ACME COMERCIO LTDA - empresa B", arquivos: [arquivo("b1", "cs.pdf", docB)] },
         ],
       });
+
+    it("com duas pastas candidatas, fica com a que o contrato diz ser da empresa (CNPJ da lista)", async () => {
+      const outra = cnpjValido("998887770001");
+      const c = duasPastas(textoContrato("OUTRA EMPRESA LTDA", outra), textoContrato("ACME COMERCIO LTDA", CNPJ));
+
+      const r = await executarImportacao(c.portas, {});
+
+      expect(r.falhas).toEqual([]);
+      expect(r.carregadas.map((x) => x.empresa)).toEqual(["ACME COMERCIO LTDA"]);
+      expect(c.enviados.map((e) => e.origemId)).toEqual(["b1"]);
+    });
+
+    it("manda para falhas quando duas pastas candidatas trazem o mesmo CNPJ (mesma empresa, só uma vale)", async () => {
+      const igual = textoContrato("ACME COMERCIO LTDA", CNPJ);
+      const c = duasPastas(igual, igual);
 
       const r = await executarImportacao(c.portas, {});
 
       expect(r.falhas).toEqual([
-        { cnpj: CNPJ, nome: "ACME COMERCIO LTDA", etapa: "pasta", motivo: "várias pastas" },
+        { cnpj: CNPJ, nome: "ACME COMERCIO LTDA", etapa: "pasta", motivo: "várias pastas com o mesmo CNPJ" },
+      ]);
+      expect(c.enviados).toEqual([]);
+    });
+
+    it("manda para falhas quando nenhuma das pastas candidatas traz o CNPJ da lista", async () => {
+      const outra = cnpjValido("998887770001");
+      const c = duasPastas(textoContrato("X LTDA", outra), textoContrato("Y LTDA", cnpjValido("554443330001")));
+
+      const r = await executarImportacao(c.portas, {});
+
+      expect(r.falhas).toEqual([
+        { cnpj: CNPJ, nome: "ACME COMERCIO LTDA", etapa: "pasta", motivo: "várias pastas, nenhuma com o CNPJ da lista" },
       ]);
     });
   });

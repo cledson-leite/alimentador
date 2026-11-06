@@ -86,6 +86,33 @@ export async function executarImportacao(portas: Portas, opcoes: OpcoesImportaca
   return resultado;
 }
 
+async function lerPasta(portas: Portas, pasta: { arquivos: ArquivoDocumento[] }): Promise<Lido[]> {
+  const lidos: Lido[] = [];
+  for (const arquivo of pasta.arquivos) {
+    const texto = (await portas.leitor.lerTexto(arquivo)) ?? "";
+    const tipo = tipoDoDocumento(texto);
+    if (tipo !== "outro") lidos.push({ arquivo, texto, tipo });
+  }
+  return lidos;
+}
+
+/**
+ * Mais de uma pasta casou pelo nome: o conteúdo decide. Fica a pasta cujos documentos trazem o CNPJ da lista.
+ * CNPJs diferentes entre as pastas são empresas diferentes; o mesmo CNPJ em mais de uma é a mesma empresa e só uma vale.
+ */
+async function desempatar(portas: Portas, cnpj: string, pastas: { arquivos: ArquivoDocumento[] }[]): Promise<Lido[]> {
+  const donas: Lido[][] = [];
+  for (const pasta of pastas) {
+    const lidos = await lerPasta(portas, pasta);
+    if (lidos.flatMap((l) => cnpjsDoTexto(l.texto)).some((c) => raiz(c) === raiz(cnpj))) donas.push(lidos);
+  }
+  if (donas.length === 1) return donas[0]!;
+  throw new FalhaDeEmpresa(
+    "pasta",
+    donas.length === 0 ? "várias pastas, nenhuma com o CNPJ da lista" : "várias pastas com o mesmo CNPJ",
+  );
+}
+
 async function carregar(
   portas: Portas,
   cnpj: string,
@@ -93,15 +120,7 @@ async function carregar(
   casamento: Casamento<{ arquivos: ArquivoDocumento[] }>,
 ): Promise<string> {
   if (casamento.tipo === "nenhuma") throw new FalhaDeEmpresa("pasta", "pasta não encontrada");
-  if (casamento.tipo === "varias") throw new FalhaDeEmpresa("pasta", "várias pastas");
-  const pasta = casamento.pasta;
-
-  const lidos: Lido[] = [];
-  for (const arquivo of pasta.arquivos) {
-    const texto = (await portas.leitor.lerTexto(arquivo)) ?? "";
-    const tipo = tipoDoDocumento(texto);
-    if (tipo !== "outro") lidos.push({ arquivo, texto, tipo });
-  }
+  const lidos = casamento.tipo === "unica" ? await lerPasta(portas, casamento.pasta) : await desempatar(portas, cnpj, casamento.pastas);
   if (lidos.length === 0) throw new FalhaDeEmpresa("documentos", "sem contrato social nem alteração");
 
   const cnpjs = lidos.flatMap((l) => cnpjsDoTexto(l.texto));
