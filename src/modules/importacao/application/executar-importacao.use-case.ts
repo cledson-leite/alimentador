@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import {
   cnpjsDoTexto,
   datasFinais,
+  nomeDoComprovante,
   nomeEmpresarial,
   numeroDoConteudo,
   numeroDoNome,
@@ -35,7 +36,7 @@ export type Resultado = {
   puladas: string[];
 };
 
-type Lido = { arquivo: ArquivoDocumento; texto: string; tipo: "contrato" | "alteracao" };
+type Lido = { arquivo: ArquivoDocumento; texto: string; tipo: "contrato" | "alteracao" | "cnpj" };
 
 class FalhaDeEmpresa extends Error {
   constructor(
@@ -134,7 +135,10 @@ async function carregar(
   if (!cnpjs.some((c) => raiz(c) === raiz(cnpj))) throw new FalhaDeEmpresa("cnpj", "CNPJ do documento diverge da lista");
 
   const contrato = lidos.find((l) => l.tipo === "contrato");
-  const empresa = nomeEmpresarial((contrato ?? lidos[0]!).texto);
+  const comprovante = lidos.find((l) => l.tipo === "cnpj");
+  const doInstrumento = contrato ?? lidos.find((l) => l.tipo === "alteracao");
+  const empresa =
+    (doInstrumento && nomeEmpresarial(doInstrumento.texto)) || (comprovante && nomeDoComprovante(comprovante.texto)) || null;
   if (!empresa) throw new FalhaDeEmpresa("nome", "nome da empresa não encontrado no documento");
 
   const alteracoes = numerar(lidos.filter((l) => l.tipo === "alteracao"));
@@ -151,7 +155,9 @@ async function carregar(
   };
 
   try {
-    const contratoCaminho = await subir("contrato-social", (contrato ?? alteracoes.at(-1)!.lido).arquivo);
+    // Só o comprovante de CNPJ: a empresa é cadastrada sem contrato e sem alterações, e nada vai ao Storage.
+    const doContrato = contrato ?? alteracoes.at(-1)?.lido;
+    const contratoCaminho = doContrato ? await subir("contrato-social", doContrato.arquivo) : null;
     const itens = [];
     for (const a of alteracoes) {
       itens.push({
@@ -181,8 +187,12 @@ function numerar(alteracoes: Lido[]) {
   // A mesma alteração costuma estar na pasta em mais de um formato (PDF e DOC): mesmo número e mesma data
   // é um documento só, e vale o formato de melhor leitura. Mesmo número com datas diferentes segue sendo falha.
   const melhorFormato = ["pdf", "docx", "doc", "imagem"];
+  // O PDF predomina: DOC/DOCX com o mesmo número de um PDF é cópia dele, mesmo que a leitura traga outra data.
+  const semCopiaEmOutroFormato = datados.filter(
+    (d) => d.lido.arquivo.formato === "pdf" || !datados.some((o) => o.lido.arquivo.formato === "pdf" && o.numero === d.numero),
+  );
   const unicos = new Map<string, (typeof datados)[number]>();
-  for (const d of datados) {
+  for (const d of semCopiaEmOutroFormato) {
     const chave = `${d.numero ?? "sem-numero"}|${d.data}`;
     const atual = unicos.get(chave);
     if (!atual || melhorFormato.indexOf(d.lido.arquivo.formato) < melhorFormato.indexOf(atual.lido.arquivo.formato)) {

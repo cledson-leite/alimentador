@@ -1,4 +1,13 @@
-import { arquivo, cnpjValido, formatarCnpj, montar, textoAlteracao, textoAlteracaoReal, textoContrato } from "../../../../test-support/cenario";
+import {
+  arquivo,
+  cnpjValido,
+  formatarCnpj,
+  montar,
+  textoAlteracao,
+  textoAlteracaoReal,
+  textoComprovanteCnpj,
+  textoContrato,
+} from "../../../../test-support/cenario";
 
 import { executarImportacao } from "./executar-importacao.use-case";
 
@@ -697,6 +706,43 @@ describe("executarImportacao", () => {
     });
   });
 
+  describe("comprovante de CNPJ na pasta", () => {
+    const carrega = async (arquivos: ReturnType<typeof arquivo>[]) => {
+      const c = montar({ lista: [{ nome: N, cnpj: CNPJ }], sn: [CNPJ], pastas: [{ nome: N, arquivos }] });
+      const r = await executarImportacao(c.portas, {});
+      return { r, c };
+    };
+
+    it("cadastra a empresa sem contrato nem alteração quando só há o comprovante de CNPJ", async () => {
+      const { r, c } = await carrega([arquivo("a1", "cartao cnpj.pdf", textoComprovanteCnpj(N, CNPJ))]);
+
+      expect(r.falhas).toEqual([]);
+      expect(r.carregadas).toEqual([{ cnpj: CNPJ, empresa: N, regime: "simples_nacional" }]);
+      expect(c.clientes[0]).toMatchObject({ cnpj: CNPJ, empresa: N, contratoSocialCaminho: null, alteracoes: [] });
+      expect(c.enviados).toEqual([]);
+    });
+
+    it("usa o comprovante como prova do CNPJ quando o contrato de constituição não o traz", async () => {
+      const { r, c } = await carrega([
+        arquivo("a1", "contrato social.pdf", textoContrato(N)),
+        arquivo("a2", "cartao cnpj.pdf", textoComprovanteCnpj(N, CNPJ)),
+      ]);
+
+      expect(r.falhas).toEqual([]);
+      expect(c.clientes[0]).toMatchObject({ cnpj: CNPJ });
+      expect(c.enviados.map((e) => e.origemId)).toEqual(["a1"]);
+    });
+
+    it("manda para falhas quando o CNPJ do comprovante é de outra raiz", async () => {
+      const outro = cnpjValido("998887770001");
+      const { r } = await carrega([arquivo("a1", "cartao cnpj.pdf", textoComprovanteCnpj(N, outro))]);
+
+      expect(r.falhas).toEqual([
+        { cnpj: CNPJ, nome: N, etapa: "cnpj", motivo: "CNPJ do documento diverge da lista" },
+      ]);
+    });
+  });
+
   describe("a mesma alteração em mais de um arquivo", () => {
     const montarComCopias = (textoDaCopia: string) =>
       montar({
@@ -725,8 +771,32 @@ describe("executarImportacao", () => {
       expect(c.enviados.map((e) => e.origemId).sort()).toEqual(["a0", "a2"]);
     });
 
-    it("continua falhando quando o mesmo número aparece com datas diferentes", async () => {
+    it("o PDF predomina sobre o DOC do mesmo número mesmo que a leitura traga datas diferentes", async () => {
       const c = montarComCopias(textoAlteracao(N, CNPJ, "PRIMEIRA", "11 de maio de 2022"));
+
+      const r = await executarImportacao(c.portas, {});
+
+      expect(r.falhas).toEqual([]);
+      const cliente = c.clientes[0] as { alteracoes: { numero: number; data: string }[] };
+      expect(cliente.alteracoes.map(({ numero, data }) => ({ numero, data }))).toEqual([{ numero: 1, data: "2022-05-11" }]);
+      expect(c.enviados.map((e) => e.origemId).sort()).toEqual(["a0", "a2"]);
+    });
+
+    it("continua falhando quando dois PDFs trazem o mesmo número com datas diferentes", async () => {
+      const c = montar({
+        lista: [{ nome: N, cnpj: CNPJ }],
+        sn: [CNPJ],
+        pastas: [
+          {
+            nome: N,
+            arquivos: [
+              arquivo("a0", "contrato social.pdf", textoContrato(N, CNPJ)),
+              arquivo("a1", "1 alteracao.pdf", textoAlteracao(N, CNPJ, "PRIMEIRA", "10 de maio de 2022")),
+              arquivo("a2", "1 alteracao b.pdf", textoAlteracao(N, CNPJ, "PRIMEIRA", "11 de maio de 2022")),
+            ],
+          },
+        ],
+      });
 
       const r = await executarImportacao(c.portas, {});
 

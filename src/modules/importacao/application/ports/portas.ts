@@ -32,7 +32,8 @@ export type NovoCliente = {
   empresa: string;
   cnpj: string;
   regime: Regime;
-  contratoSocialCaminho: string;
+  /** Nulo quando a pasta só tem o comprovante de CNPJ (empresa cadastrada sem contrato). */
+  contratoSocialCaminho: string | null;
   alteracoes: { id: string; numero: number; data: string; arquivoCaminho: string }[];
 };
 

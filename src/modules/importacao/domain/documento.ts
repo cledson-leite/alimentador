@@ -10,6 +10,13 @@ export function cnpjsDoTexto(texto: string): string[] {
 /** Nome entre aspas no corpo ("NOME LTDA", com sede...), que é como os contratos reais o escrevem. */
 const NOME_ENTRE_ASPAS = /[“"]([^”"\n]{3,120}?\s(?:LTDA|EIRELI|S\/A|S\.A\.|EPP|ME|SS|MEI))\.?[”"]/i;
 
+/** Nome na linha logo após "NOME EMPRESARIAL" no comprovante de CNPJ. */
+export function nomeDoComprovante(texto: string): string | null {
+  const linhas = texto.split("\n").map((l) => l.trim()).filter(Boolean);
+  const i = linhas.findIndex((l) => /^NOME EMPRESARIAL$/i.test(l));
+  return i >= 0 ? (linhas[i + 1] ?? null) : null;
+}
+
 /** "adotará como nome empresarial: X LTDA", quando o contrato abre pela qualificação dos sócios. */
 const NOME_EMPRESARIAL_DECLARADO = /nome empresarial:?\s+([^,\n]+?\s(?:LTDA|EIRELI|S\/A|S\.A\.|EPP|ME|SS|MEI))\b/i;
 /** Linha que é só o nome (termina na forma societária), como logo abaixo do título da alteração. */
@@ -37,8 +44,13 @@ export function nomeEmpresarial(texto: string): string | null {
 const semAcento = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
 /** O título nas primeiras linhas decide o tipo; a palavra solta no corpo não conta. */
-export function tipoDoDocumento(texto: string): "contrato" | "alteracao" | "outro" {
+export function tipoDoDocumento(texto: string): "contrato" | "alteracao" | "cnpj" | "outro" {
   const todas = texto.split("\n").map((l) => semAcento(l.trim()).toUpperCase()).filter(Boolean);
+  // Comprovante de Inscrição e de Situação Cadastral (cartão CNPJ): prova o CNPJ e traz o nome empresarial.
+  const cabecalho = todas.slice(0, 12).join(" ");
+  if (/COMPROVANTE DE INSCRICAO E DE SITUACAO/.test(cabecalho) && /CADASTRO NACIONAL DA PESSOA JURIDICA/.test(cabecalho)) {
+    return "cnpj";
+  }
   const titulo = todas.slice(0, 3);
   const tituloJunto = titulo.join(" ");
   const topo = todas.slice(0, 8).join(" ");

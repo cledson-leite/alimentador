@@ -84,6 +84,25 @@ export function montar(c: Cenario) {
   return { portas: { planilhas, documentos, leitor, cadastro, pastaPorCnpj }, enviados, removidos, clientes };
 }
 
+/** Comprovante de Inscrição e de Situação Cadastral (cartão CNPJ), na forma do texto real. */
+export function textoComprovanteCnpj(nome: string, cnpj: string): string {
+  return [
+    "06/11/2026",
+    "REPÚBLICA FEDERATIVA DO BRASIL",
+    "CADASTRO NACIONAL DA PESSOA JURÍDICA",
+    "NÚMERO DE INSCRIÇÃO",
+    formatarCnpj(cnpj),
+    "MATRIZ",
+    "COMPROVANTE DE INSCRIÇÃO E DE SITUAÇÃO",
+    "CADASTRAL",
+    "DATA DE ABERTURA",
+    "10/05/2015",
+    "NOME EMPRESARIAL",
+    nome,
+    "TÍTULO DO ESTABELECIMENTO (NOME DE FANTASIA)",
+  ].join("\n");
+}
+
 /** Alteração com a linha de data como nos contratos reais, seguida do bloco de assinaturas dos sócios. */
 export function textoAlteracaoReal(nome: string, cnpj: string, ordinal: string, linhaData: string): string {
   return [
