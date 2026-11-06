@@ -11,6 +11,7 @@ import {
 } from "../domain/documento";
 import { cnpjValido } from "../domain/cnpj";
 import { casarPasta, type Casamento } from "../domain/pasta";
+import { nomeSeguro } from "../domain/storage";
 import { resolverRegime } from "../domain/regime";
 
 import type { ArquivoDocumento, CadastroPort, DocumentosPort, LeitorPort, PlanilhasPort, Regime } from "./ports/portas";
@@ -112,7 +113,9 @@ async function carregar(
   const id = randomUUID();
   const enviados: string[] = [];
   const subir = async (pasta: string, a: ArquivoDocumento) => {
-    const caminho = `${id}/${pasta}/${a.nome}`;
+    const seguro = nomeSeguro(a.nome);
+    let caminho = `${id}/${pasta}/${seguro}`;
+    for (let n = 2; enviados.includes(caminho); n++) caminho = `${id}/${pasta}/${n}-${seguro}`;
     await portas.cadastro.enviar(caminho, a);
     enviados.push(caminho);
     return caminho;

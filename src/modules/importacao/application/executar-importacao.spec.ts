@@ -425,4 +425,40 @@ describe("executarImportacao", () => {
       ]);
     });
   });
+
+  it("grava no Storage objetos com nome seguro (sem acento, 'º', espaços ou barras)", async () => {
+    const c = montar({
+      lista: [{ nome: N, cnpj: CNPJ }],
+      sn: [CNPJ],
+      pastas: [{ nome: N, arquivos: [arquivo("a1", "1º ALTERAÇÃO / contrato social.pdf", textoContrato(N, CNPJ))] }],
+    });
+
+    await executarImportacao(c.portas, {});
+
+    expect(c.enviados[0]!.caminho).toMatch(/^[0-9a-f-]{36}\/contrato-social\/1o-alteracao-contrato-social\.pdf$/);
+  });
+
+  it("não deixa dois arquivos de nomes parecidos sobrescreverem o mesmo objeto no Storage", async () => {
+    const c = montar({
+      lista: [{ nome: N, cnpj: CNPJ }],
+      sn: [CNPJ],
+      pastas: [
+        {
+          nome: N,
+          arquivos: [
+            arquivo("a0", "contrato social.pdf", textoContrato(N, CNPJ)),
+            arquivo("a1", "1 alteração.pdf", textoAlteracao(N, CNPJ, "PRIMEIRA", "10 de maio de 2022")),
+            arquivo("a2", "2 alteracao.pdf", textoAlteracao(N, CNPJ, "SEGUNDA", "20 de agosto de 2023")),
+            arquivo("a3", "1  ALTERAÇÃO.pdf", textoAlteracao(N, CNPJ, "TERCEIRA", "20 de agosto de 2024")),
+          ],
+        },
+      ],
+    });
+
+    await executarImportacao(c.portas, {});
+
+    const caminhos = c.enviados.map((e) => e.caminho);
+    expect(caminhos).toHaveLength(4);
+    expect(new Set(caminhos).size).toBe(4);
+  });
 });
