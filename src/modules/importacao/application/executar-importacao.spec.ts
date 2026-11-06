@@ -601,6 +601,51 @@ describe("executarImportacao", () => {
       expect(r.carregadas.map((x) => x.empresa)).toEqual([N]);
     });
 
+    it("reconhece o contrato de constituição que abre pelo sócio, sem título, pela CLÁUSULA PRIMEIRA", async () => {
+      const texto = [
+        "EVILASIO DE CARVALHO JUNIOR, brasileiro, nascido no dia 10 de setembro de 1980, natural da Cidade de Cascavel",
+        `CLÁUSULA PRIMEIRA: A sociedade terá como denominação empresarial o nome "${N}", com sede e foro em Cascavel/PR,`,
+        "CLÁUSULA SEGUNDA: O objeto social da sociedade será:",
+        `CNPJ ${formatarCnpj(CNPJ)}`,
+      ].join("\n");
+
+      const { r } = await carregaCom([arquivo("a1", "contrato.pdf", texto)]);
+
+      expect(r.falhas).toEqual([]);
+      expect(r.carregadas.map((x) => x.empresa)).toEqual([N]);
+    });
+
+    it("reconhece a alteração que abre pela folha de 'Motivos' e traz CLÁUSULAs, lendo nome e data", async () => {
+      const texto = [
+        "Motivos: a) Alteração do endereço da empresa;",
+        "b) Consolidação Contratual e posteriores alterações.",
+        "ARI ANTONIO SCHUTZ, brasileiro, nascido no dia 10 de junho de 1970",
+        `CLÁUSULA PRIMEIRA: A sociedade gira sob o nome empresarial: ${N}, inscrita no CNPJ ${formatarCnpj(CNPJ)}`,
+        "Cascavel/PR, 20 de fevereiro de 2026.",
+      ].join("\n");
+
+      const { r, c } = await carregaCom([arquivo("a1", "1 alteracao.pdf", texto)]);
+
+      expect(r.falhas).toEqual([]);
+      const cliente = c.clientes[0] as { alteracoes: { data: string }[] };
+      expect(cliente.alteracoes.map((a) => a.data)).toEqual(["2026-02-20"]);
+    });
+
+    it("reconhece 'ALTERAÇÃO POR TRANSFORMAÇÃO' quando a palavra de contrato vem na linha seguinte", async () => {
+      const texto = [
+        "ALTERAÇÃO POR TRANSFORMAÇÃO",
+        "DO INSTRUMENTO DE INSCRIÇÃO DE EMPRESÁRIO INDIVIDUAL EM",
+        "SOCIEDADE EMPRESÁRIA LIMITADA UNIPESSOAL",
+        `“${N}”, inscrita no CNPJ ${formatarCnpj(CNPJ)}.`,
+        "Cascavel/PR, 20 de fevereiro de 2026.",
+      ].join("\n");
+
+      const { r } = await carregaCom([arquivo("a1", "1 alteracao.pdf", texto)]);
+
+      expect(r.falhas).toEqual([]);
+      expect(r.carregadas.map((x) => x.empresa)).toEqual([N]);
+    });
+
     it.each([
       ["página de portal", "Alteração\nMatriz\nSolicitação concluída com sucesso!"],
       ["e-mail", "Bom dia. Preciso de uma atualização de dados\nPrezado(a), A Jucesp adota os procedimentos"],

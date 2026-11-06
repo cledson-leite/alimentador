@@ -38,9 +38,19 @@ const semAcento = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, 
 
 /** O título nas primeiras linhas decide o tipo; a palavra solta no corpo não conta. */
 export function tipoDoDocumento(texto: string): "contrato" | "alteracao" | "outro" {
-  const linhas = texto.split("\n").slice(0, 3).map((l) => semAcento(l.trim()).toUpperCase());
-  if (linhas.some((l) => TITULO_DE_ALTERACAO.test(l))) return "alteracao";
-  if (linhas.join(" ").includes("CONTRATO SOCIAL")) return "contrato";
+  const todas = texto.split("\n").map((l) => semAcento(l.trim()).toUpperCase()).filter(Boolean);
+  const titulo = todas.slice(0, 3);
+  const tituloJunto = titulo.join(" ");
+  const topo = todas.slice(0, 8).join(" ");
+  // CLÁUSULA separa instrumento de verdade de página de portal, e-mail ou manual que só citam "alteração".
+  const temClausulas = /\bCLAUSULA\b/.test(todas.join(" "));
+  if (titulo.some((l) => TITULO_DE_ALTERACAO.test(l)) || /ALTERACAO\b.*(CONTRAT|SOCIAL|INSTRUMENTO|INDIVIDUAL)/.test(tituloJunto)) {
+    return "alteracao";
+  }
+  if (temClausulas && /MOTIVOS:|CONSOLIDACAO CONTRATUAL|\bALTERACAO\b/.test(topo)) return "alteracao";
+  if (tituloJunto.includes("CONTRATO SOCIAL")) return "contrato";
+  // Constituição sem título: abre pela qualificação dos sócios e declara a denominação na CLÁUSULA PRIMEIRA.
+  if (/CLAUSULA PRIMEIRA.*(DENOMINACAO EMPRESARIAL|NOME EMPRESARIAL)/.test(topo)) return "contrato";
   return "outro";
 }
 
