@@ -23,14 +23,13 @@ export function cnpjsDoSn(rows: Linhas): Set<string> {
   return new Set(cnpjs);
 }
 
-export function regimesDoTributario(rows: Linhas): Map<string, "lucro_presumido" | "lucro_real" | "baixou" | "ignorada"> {
-  const mapa = new Map<string, "lucro_presumido" | "lucro_real" | "baixou" | "ignorada">();
+export function regimesDoTributario(rows: Linhas): Map<string, "lucro_presumido" | "lucro_real" | "ignorada"> {
+  const mapa = new Map<string, "lucro_presumido" | "lucro_real" | "ignorada">();
   for (const r of rows) {
     const regime = texto(r[3]).toUpperCase();
     const cnpj = soDigitos(texto(r[0]));
     if (cnpj.length !== 14) continue;
-    if (texto(r[2]).toUpperCase() === "BAIXOU") mapa.set(cnpj, "baixou");
-    else if (regime === "L. PRESUMIDO") mapa.set(cnpj, "lucro_presumido");
+    if (regime === "L. PRESUMIDO") mapa.set(cnpj, "lucro_presumido");
     else if (regime === "OUTRAS ENT.") mapa.set(cnpj, "ignorada");
     else if (regime === "L. REAL") mapa.set(cnpj, "lucro_real");
   }

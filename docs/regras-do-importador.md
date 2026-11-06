@@ -8,7 +8,8 @@ Spec: [`docs/specs/importador-clientes.md`](specs/importador-clientes.md) · Glo
 
 - A **Lista de empresas** (nome e CNPJ) define o universo. Cada linha é uma empresa; `empresa` e `cnpj` gravados vêm dela quando o documento não traz.
 - O regime vem de duas planilhas: **SN** (só a aba "Patriki 102026", que é a lista atualizada) e **Tributário** (presumido e real). Quando a empresa consta nas duas, **vale o Tributário**.
-- Sem regime em nenhuma das duas: **não carrega**, vai para `regime-a-confirmar.csv`. A linha marcada **BAIXOU** (na coluna da IE do Tributário) também vai para o regime a confirmar. **OUTRAS ENT.** é ignorada.
+- **Só três informações contam, nas três fontes: CNPJ, nome/razão social e regime.** Qualquer outra coluna das planilhas é **ignorada** (ex.: a coluna da inscrição estadual, onde aparecia "BAIXOU": a empresa marcada assim é carregada normalmente pelo regime que a planilha traz).
+- Sem regime em nenhuma das duas: **não carrega**, vai para `regime-a-confirmar.csv`. **OUTRAS ENT.** é ignorada.
 - **Fora da carga:** pessoas físicas (CPF) em `pessoas-fisicas.csv`; condomínios, associações, cartórios e tabelionatos; empresas que só existem nas planilhas e não estão na lista (SN 41, Tributário 7); a planilha de controle de alterações (cobre ~2%).
 - CNPJ repetido na lista: carrega uma vez só.
 
@@ -25,7 +26,7 @@ Spec: [`docs/specs/importador-clientes.md`](specs/importador-clientes.md) · Glo
 
 **Alteração contratual:** "alteração contratual" ou equivalente: "alterações contratuais", "alteração do contrato social", "alteração do ato constitutivo", "alteração por …" (transformação, incorporação, cisão, transferência de sede), com ordinal ou número antes ("oitava", "3ª"). O **título** e a folha de **Motivos** (mudanças efetivas na empresa, ex.: alteração de endereço, objeto, quadro social, consolidação) definem. A frase sozinha, no corpo, só vale se o documento tiver **cláusulas**. Título deslocado (depois da 3ª linha, atrás de carimbo da Junta) também exige cláusulas.
 
-**Não são alteração nem contrato:** **requerimento** e **capa do requerimento** da Junta (decide o título: se "CAPA" ou "REQUERIMENTO" abre o documento antes de qualquer título de alteração), protocolo da Junta, pedido ou confirmação da Receita Estadual, troca de contador, orientação interna, termo de quitação, certificado MEI, QSA, RG, CNH, certidões.
+**Não são alteração nem contrato:** **requerimento** e **capa do requerimento** da Junta (decide o título: se "CAPA" ou "REQUERIMENTO" abre o documento antes de qualquer título de alteração), protocolo da Junta, pedido ou confirmação da Receita Estadual, troca de contador, orientação interna, **procuração, substabelecimento e certidão de cartório** (mandato; citam "alteração contratual" e trazem cláusulas, mas decide o título), termo de quitação, certificado MEI, QSA, RG, CNH, certidões.
 
 **Comprovante de CNPJ** (Comprovante de Inscrição e de Situação Cadastral): é documento reconhecido, prova o CNPJ e traz o nome empresarial.
 
@@ -40,7 +41,7 @@ Spec: [`docs/specs/importador-clientes.md`](specs/importador-clientes.md) · Glo
 
 ## 5. Nome da empresa
 
-Ordem: nome do contrato ou da alteração → nome do comprovante → **razão social da lista**, sem as anotações do escritório ("- empresa", "inicia na Rigoni em…", "- MATRIZ", "- FILIAL X"). **Filial** é gravada como `EMPRESA - FILIAL X` (o trecho vem da lista), com o CNPJ da própria filial.
+O `empresa` gravado é sempre a **razão social da lista**, sem as anotações do escritório ("- empresa", "inicia na Rigoni em…", "- MATRIZ", "- FILIAL X"). O nome do contrato **não** é usado, porque o contrato de constituição pode trazer o nome antigo (a razão social é trocada numa alteração). **Filial** é gravada como `EMPRESA - FILIAL X` (o trecho vem da lista), com o CNPJ da própria filial.
 
 ## 6. Alterações: número, data e duplicatas
 

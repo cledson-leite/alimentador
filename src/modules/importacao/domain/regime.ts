@@ -4,10 +4,9 @@ import type { Regime } from "../application/ports/portas";
 export function resolverRegime(
   cnpj: string,
   sn: Set<string>,
-  tributario: Map<string, "lucro_presumido" | "lucro_real" | "baixou" | "ignorada">,
+  tributario: Map<string, "lucro_presumido" | "lucro_real" | "ignorada">,
 ): Regime | "ignorada" | null {
   const t = tributario.get(cnpj);
-  if (t === "baixou") return null;
   if (t === "ignorada") return "ignorada";
   return t ?? (sn.has(cnpj) ? "simples_nacional" : null);
 }

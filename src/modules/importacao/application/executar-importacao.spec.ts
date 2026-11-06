@@ -53,25 +53,6 @@ describe("executarImportacao", () => {
     expect(r.carregadas).toEqual([{ cnpj: CNPJ, empresa: "ACME COMERCIO LTDA", regime: "lucro_presumido" }]);
   });
 
-  it("manda para regimeAConfirmar a empresa marcada como baixada no tributário, mesmo constando na SN", async () => {
-    const c = montar({
-      lista: [{ nome: "ACME COMERCIO LTDA", cnpj: CNPJ }],
-      sn: [CNPJ],
-      tributario: { [CNPJ]: "baixou" },
-      pastas: [
-        {
-          nome: "ACME COMERCIO LTDA",
-          arquivos: [arquivo("a1", "contrato social.pdf", textoContrato("ACME COMERCIO LTDA", CNPJ))],
-        },
-      ],
-    });
-
-    const r = await executarImportacao(c.portas, {});
-
-    expect(r.carregadas).toEqual([]);
-    expect(r.regimeAConfirmar).toEqual([{ cnpj: CNPJ, nome: "ACME COMERCIO LTDA" }]);
-  });
-
   it("ignora de vez a entidade marcada como ignorada no tributário: nem carrega nem lista", async () => {
     const c = montar({
       lista: [{ nome: "IGREJA", cnpj: CNPJ }],
@@ -179,6 +160,25 @@ describe("executarImportacao", () => {
     expect(r.carregadas).toEqual([{ cnpj: CNPJ, empresa: "ACME COMERCIO LTDA", regime: "simples_nacional" }]);
     expect(c.clientes[0]).toMatchObject({ cnpj: CNPJ, empresa: "ACME COMERCIO LTDA" });
     expect(c.enviados.map((e) => e.origemId)).toEqual(["a1"]);
+  });
+
+  it("grava a razão social da lista, mesmo que o contrato de constituição traga o nome antigo da empresa", async () => {
+    const c = montar({
+      lista: [{ nome: "GALAFASSI HOLDING LTDA", cnpj: CNPJ }],
+      sn: [CNPJ],
+      pastas: [
+        {
+          nome: "GALAFASSI HOLDING LTDA",
+          arquivos: [arquivo("a1", "contrato social.pdf", textoContrato("VRS COMERCIO DE MOVEIS LTDA", CNPJ))],
+        },
+      ],
+    });
+
+    const r = await executarImportacao(c.portas, {});
+
+    expect(r.falhas).toEqual([]);
+    expect(r.carregadas.map((x) => x.empresa)).toEqual(["GALAFASSI HOLDING LTDA"]);
+    expect(c.clientes[0]).toMatchObject({ empresa: "GALAFASSI HOLDING LTDA" });
   });
 
   it("usa a razão social da lista quando o nome não sai do documento (sem as anotações do escritório)", async () => {
@@ -711,6 +711,26 @@ describe("executarImportacao", () => {
         ].join("\n"),
       ],
       ["requerimento da Junta sem a palavra capa", "REQUERIMENTO DE EMPRESÁRIO\nALTERAÇÃO CONTRATUAL\nCLÁUSULA PRIMEIRA: pedido de registro\nCascavel/PR, 20 de fevereiro de 2026."],
+      [
+        "procuração que cita alteração contratual e traz cláusulas",
+        [
+          "PROCURAÇÃO",
+          "OUTORGANTE: ACME COMERCIO LTDA, inscrita no CNPJ 11.222.333/0001-81",
+          "Confere poderes para assinar a alteração contratual da sociedade perante a Junta Comercial.",
+          "CLÁUSULA PRIMEIRA: os poderes são válidos por 12 meses.",
+          "Cascavel/PR, 5 de novembro de 2025. Documento assinado eletronicamente com certificado digital",
+        ].join("\n"),
+      ],
+      [
+        "certidão de cartório de uma procuração",
+        [
+          "1234-P 100",
+          "2024 0001/01",
+          "CERTIDÃO - Certifico atendendo a pedido de parte interessada, que revendo os Livros de PROCURAÇÃO",
+          "Procuração bastante que faz: FULANO, que confere poderes para assinar alteração contratual da sociedade.",
+          "CLÁUSULA PRIMEIRA: os poderes são válidos por 12 meses.",
+        ].join("\n"),
+      ],
       ["pedido de alteração cadastral", "Cadastro de Contribuintes - Comprovante do Pedido\nNatureza do Pedido: Alteração contratual de Inscrição Estadual"],
       ["orientação interna", "Alterações para rodar em 03/2026\n* Alteração contratual - VIA BR INFORMATICA LTDA\nAlterar razão social para: ACME LTDA"],
     ])("ignora %s que cita 'alteração contratual' mas não é o instrumento, sem bloquear a empresa", async (_caso, texto) => {
@@ -952,7 +972,7 @@ describe("executarImportacao", () => {
       const r = await executarImportacao(c.portas, {});
 
       expect(r.falhas).toEqual([]);
-      expect(r.carregadas.map((x) => x.empresa)).toEqual(["TEIXEIRA COMERCIO LTDA"]);
+      expect(r.carregadas.map((x) => x.empresa)).toEqual(["TEXEIRA COMERCIO LTDA"]);
     });
 
     it("sem a pasta no mapeamento, segue valendo a regra estrita (e não aproxima por semelhança)", async () => {

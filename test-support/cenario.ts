@@ -44,7 +44,7 @@ export function arquivo(
 export type Cenario = {
   lista?: { nome: string; cnpj: string }[];
   sn?: string[];
-  tributario?: Record<string, "lucro_presumido" | "lucro_real" | "baixou" | "ignorada">;
+  tributario?: Record<string, "lucro_presumido" | "lucro_real" | "ignorada">;
   pastas?: (Pasta & { arquivos: (ArquivoDocumento & { texto: string })[] })[];
   existentes?: string[];
   criarCliente?: "falha" | "resposta-perdida";

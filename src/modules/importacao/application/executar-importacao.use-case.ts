@@ -3,8 +3,6 @@ import { randomUUID } from "node:crypto";
 import {
   cnpjsDoTexto,
   datasFinais,
-  nomeDoComprovante,
-  nomeEmpresarial,
   numeroDoConteudo,
   numeroDoNome,
   raiz,
@@ -191,12 +189,8 @@ async function carregar(
   if (provaDoCnpj(lidos, cnpj) === "diverge") throw new FalhaDeEmpresa("cnpj", "CNPJ do documento diverge da lista");
 
   const contrato = lidos.find((l) => l.tipo === "contrato");
-  const comprovante = lidos.find((l) => l.tipo === "cnpj");
-  const doInstrumento = contrato ?? lidos.find((l) => l.tipo === "alteracao");
-  const nomeDoDocumento =
-    (doInstrumento && nomeEmpresarial(doInstrumento.texto)) ||
-    (comprovante && nomeDoComprovante(comprovante.texto)) ||
-    razaoSocialDaLista(nomeLista);
+  // A razão social vigente é a da lista (o contrato de constituição pode trazer o nome antigo, trocado numa alteração).
+  const nomeDoDocumento = razaoSocialDaLista(nomeLista);
   // Filial é outra empresa, com CNPJ próprio: o nome é "EMPRESA - FILIAL X" (o trecho da filial vem da lista).
   const filial = cnpj.slice(8, 12) !== "0001" ? nomeLista.match(/\bfilial\b.*$/i)?.[0] : undefined;
   const empresa = filial ? `${nomeDoDocumento} - ${filial.toUpperCase()}` : nomeDoDocumento;

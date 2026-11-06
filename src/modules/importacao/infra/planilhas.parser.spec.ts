@@ -41,9 +41,17 @@ describe("interpretação das planilhas", () => {
     );
   });
 
-  it("marca como 'baixou' a linha do tributário cuja IE diz BAIXOU, mesmo com regime preenchido", () => {
-    const rows = [["11.222.333/0001-81", "ACME", "BAIXOU", "L. PRESUMIDO"]];
+  it("só considera CNPJ, nome e regime: o que estiver na coluna da IE (ex.: BAIXOU) é ignorado", () => {
+    const rows = [
+      ["11.222.333/0001-81", "ACME", "BAIXOU", "L. PRESUMIDO"],
+      ["44.373.409/0001-00", "OUTRA", "NAO ATIVO", "L. REAL"],
+    ];
 
-    expect(regimesDoTributario(rows)).toEqual(new Map([["11222333000181", "baixou"]]));
+    expect(regimesDoTributario(rows)).toEqual(
+      new Map([
+        ["11222333000181", "lucro_presumido"],
+        ["44373409000100", "lucro_real"],
+      ]),
+    );
   });
 });

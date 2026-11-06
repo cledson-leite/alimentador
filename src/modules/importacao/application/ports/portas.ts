@@ -14,8 +14,8 @@ export type Pasta = { nome: string; arquivos: ArquivoDocumento[] };
 export interface PlanilhasPort {
   lerLista(): Promise<LinhaLista[]>;
   lerSn(): Promise<Set<string>>;
-  /** "baixou": a IE diz BAIXOU (vai ao regime a confirmar). "ignorada": regime que o banco não tem (OUTRAS ENT.). */
-  lerTributario(): Promise<Map<string, "lucro_presumido" | "lucro_real" | "baixou" | "ignorada">>;
+  /** "ignorada": regime que o banco não tem (OUTRAS ENT.). Só CNPJ, nome e regime contam: as demais colunas são ignoradas. */
+  lerTributario(): Promise<Map<string, "lucro_presumido" | "lucro_real" | "ignorada">>;
 }
 
 export interface DocumentosPort {
