@@ -44,6 +44,25 @@ describe("executarImportacao", () => {
     expect(r.carregadas).toEqual([{ cnpj: CNPJ, empresa: "ACME COMERCIO LTDA", regime: "lucro_presumido" }]);
   });
 
+  it("manda para regimeAConfirmar a empresa marcada como baixada no tributário, mesmo constando na SN", async () => {
+    const c = montar({
+      lista: [{ nome: "ACME COMERCIO LTDA", cnpj: CNPJ }],
+      sn: [CNPJ],
+      tributario: { [CNPJ]: "baixou" },
+      pastas: [
+        {
+          nome: "ACME COMERCIO LTDA",
+          arquivos: [arquivo("a1", "contrato social.pdf", textoContrato("ACME COMERCIO LTDA", CNPJ))],
+        },
+      ],
+    });
+
+    const r = await executarImportacao(c.portas, {});
+
+    expect(r.carregadas).toEqual([]);
+    expect(r.regimeAConfirmar).toEqual([{ cnpj: CNPJ, nome: "ACME COMERCIO LTDA" }]);
+  });
+
   it("não carrega empresa sem regime em nenhuma planilha e a lista em regimeAConfirmar", async () => {
     const c = montar({
       lista: [{ nome: "ACME COMERCIO LTDA", cnpj: CNPJ }],

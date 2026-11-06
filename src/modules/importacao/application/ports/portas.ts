@@ -8,7 +8,8 @@ export type Pasta = { nome: string; arquivos: ArquivoDocumento[] };
 export interface PlanilhasPort {
   lerLista(): Promise<LinhaLista[]>;
   lerSn(): Promise<Set<string>>;
-  lerTributario(): Promise<Map<string, "lucro_presumido" | "lucro_real">>;
+  /** "baixou": a IE da linha diz BAIXOU; a empresa vai para o regime a confirmar. */
+  lerTributario(): Promise<Map<string, "lucro_presumido" | "lucro_real" | "baixou">>;
 }
 
 export interface DocumentosPort {
