@@ -102,6 +102,8 @@ Uma ferramenta de linha de comando que, para cada empresa da Lista de empresas, 
 
 ## Further Notes
 
+- **As regras decididas pelo usuário ao longo da implementação, com as correções ao que está escrito acima e nos tickets, estão consolidadas em [`docs/regras-do-importador.md`](../regras-do-importador.md). Em caso de conflito, aquele documento vale.**
+
 - **Volume esperado de `falhas.csv`:** é grande e é esperado. Na letra A, 55% das pastas não têm contrato nem alteração em lugar algum; 58% dos PDFs candidatos são escaneados; 36 carregáveis já ficaram sem arquivos no download. Sem OCR só ~6% das empresas têm contrato/alteração legível. A lista é a fila de trabalho manual do usuário, que corrige a pasta e refaz com `--cnpj`.
 - **Custo estimado do OCR híbrido:** ~US$ 8–20 para ~2.100 páginas (ticket 04).
 - **Pendência do usuário (não bloqueia):** confirmar uma a uma as 40 linhas de `_candidatos-aproximados.csv`.
