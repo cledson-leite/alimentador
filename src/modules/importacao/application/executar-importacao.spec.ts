@@ -1,4 +1,4 @@
-import { arquivo, cnpjValido, montar, textoAlteracao, textoAlteracaoReal, textoContrato } from "../../../../test-support/cenario";
+import { arquivo, cnpjValido, formatarCnpj, montar, textoAlteracao, textoAlteracaoReal, textoContrato } from "../../../../test-support/cenario";
 
 import { executarImportacao } from "./executar-importacao.use-case";
 
@@ -493,6 +493,48 @@ describe("executarImportacao", () => {
 
     expect(r.carregadas.map((x) => x.cnpj)).toEqual([outro]);
     expect(r.falhas).toEqual([]);
+  });
+
+  describe("formas reais de escrever o nome e o tipo do documento", () => {
+    const carregaCom = async (arquivos: ReturnType<typeof arquivo>[], nomeLista = N) => {
+      const c = montar({ lista: [{ nome: nomeLista, cnpj: CNPJ }], sn: [CNPJ], pastas: [{ nome: nomeLista, arquivos }] });
+      const r = await executarImportacao(c.portas, {});
+      return { r, c };
+    };
+
+    it("lê o nome na linha logo abaixo do título quando o corpo não o põe entre aspas", async () => {
+      const texto = ["PRIMEIRA ALTERAÇÃO CONTRATUAL", N, `CNPJ: ${formatarCnpj(CNPJ)}`, "Cascavel/PR, 20 de fevereiro de 2026."].join("\n");
+
+      const { r } = await carregaCom([arquivo("a1", "1 alteracao.pdf", texto)]);
+
+      expect(r.falhas).toEqual([]);
+      expect(r.carregadas.map((x) => x.empresa)).toEqual([N]);
+    });
+
+    it("lê o nome do empresário individual (nome completo seguido do CPF) no título", async () => {
+      const texto = [
+        "INSTRUMENTO DE ALTERAÇÃO DO EMPRESÁRIO INDIVIDUAL",
+        "LEONARDO DALMINA SILVA 12345678901",
+        `CNPJ: ${formatarCnpj(CNPJ)}`,
+        "Cascavel, Pr., 20 de junho de 2025.",
+      ].join("\n");
+
+      const { r } = await carregaCom([arquivo("a1", "1 alteracao.pdf", texto)], "LEONARDO DALMINA SILVA");
+
+      expect(r.falhas).toEqual([]);
+      expect(r.carregadas.map((x) => x.empresa)).toEqual(["LEONARDO DALMINA SILVA"]);
+    });
+
+    it.each([
+      ["página de portal", "Alteração\nMatriz\nSolicitação concluída com sucesso!"],
+      ["e-mail", "Bom dia. Preciso de uma atualização de dados\nPrezado(a), A Jucesp adota os procedimentos"],
+      ["manual", "PARA ALTERAÇÃO:\nQUANDO FOR ESCRITORIO ADM\nALTERAÇÃO DO TIPO DE UNIDADE"],
+    ])("não trata %s como alteração contratual, só por conter a palavra 'alteração'", async (_caso, texto) => {
+      const { r } = await carregaCom([arquivo("a1", "outro.pdf", texto)]);
+
+      expect(r.carregadas).toEqual([]);
+      expect(r.falhas[0]).toMatchObject({ etapa: "documentos", motivo: "sem contrato social nem alteração" });
+    });
   });
 
   describe("a mesma alteração em mais de um arquivo", () => {

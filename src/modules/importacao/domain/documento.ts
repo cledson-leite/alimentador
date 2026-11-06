@@ -10,19 +10,35 @@ export function cnpjsDoTexto(texto: string): string[] {
 /** Nome entre aspas no corpo ("NOME LTDA", com sede...), que é como os contratos reais o escrevem. */
 const NOME_ENTRE_ASPAS = /[“"]([^”"\n]{3,120}?\s(?:LTDA|EIRELI|S\/A|S\.A\.|EPP|ME|SS|MEI))\.?[”"]/i;
 
+/** Linha que é só o nome (termina na forma societária), como logo abaixo do título da alteração. */
+const LINHA_DE_NOME = /^(.{3,120}?\s(?:LTDA|EIRELI|S\/A|S\.A\.|EPP|ME|SS|MEI))\.?$/i;
+/** Empresário individual: nome completo seguido do CPF (11 dígitos), sem forma societária. */
+const NOME_E_CPF = /(?:^|-\s*)([A-ZÀ-Ú][A-ZÀ-Ú ]{5,80}?)\s+\d{11}\b/;
+
 export function nomeEmpresarial(texto: string): string | null {
-  return texto.match(NOME_ENTRE_ASPAS)?.[1]?.trim() ?? null;
+  const entreAspas = texto.match(NOME_ENTRE_ASPAS)?.[1]?.trim();
+  if (entreAspas) return entreAspas;
+  const inicio = texto.split("\n").map((l) => l.trim()).filter(Boolean).slice(0, 6);
+  const naLinha = inicio.map((l) => (/ALTERA|CONTRAT|CONSOLIDA/i.test(l) ? null : l.match(LINHA_DE_NOME)?.[1])).find(Boolean);
+  if (naLinha) return naLinha.trim();
+  if (/EMPRES[AÁ]RI[OA]/i.test(inicio.slice(0, 4).join(" "))) {
+    return inicio.slice(0, 4).map((l) => l.match(NOME_E_CPF)?.[1]).find(Boolean)?.trim() ?? null;
+  }
+  return null;
 }
 
 const semAcento = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
 /** O título nas primeiras linhas decide o tipo; a palavra solta no corpo não conta. */
 export function tipoDoDocumento(texto: string): "contrato" | "alteracao" | "outro" {
-  const titulo = semAcento(texto.split("\n").slice(0, 3).join(" ")).toUpperCase();
-  if (titulo.includes("ALTERACAO")) return "alteracao";
-  if (titulo.includes("CONTRATO SOCIAL")) return "contrato";
+  const linhas = texto.split("\n").slice(0, 3).map((l) => semAcento(l.trim()).toUpperCase());
+  if (linhas.some((l) => TITULO_DE_ALTERACAO.test(l))) return "alteracao";
+  if (linhas.join(" ").includes("CONTRATO SOCIAL")) return "contrato";
   return "outro";
 }
+
+/** Linha de título de alteração: "ALTERAÇÃO" no começo (após ordinal), com palavra de contrato na mesma linha. */
+const TITULO_DE_ALTERACAO = /^(?:[#\d]+\s*[ªº°A]?\s*|[A-Z]+\s+){0,3}ALTERACAO\b.*(?:CONTRAT|SOCIAL|INSTRUMENTO|INDIVIDUAL)/;
 
 const UNIDADES: Record<string, number> = {
   PRIMEIRA: 1, SEGUNDA: 2, TERCEIRA: 3, QUARTA: 4, QUINTA: 5, SEXTA: 6, SETIMA: 7, OITAVA: 8, NONA: 9,
