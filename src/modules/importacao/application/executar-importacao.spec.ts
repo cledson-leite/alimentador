@@ -610,6 +610,37 @@ describe("executarImportacao", () => {
       expect(r.carregadas.map((x) => x.empresa)).toEqual([N]);
     });
 
+    it("acha o título e o número da alteração mesmo atrás do carimbo da Junta e de cabeçalhos de página", async () => {
+      const texto = [
+        "JUNTA COMERCIAL DO ESTADO DO PARANÁ - SEDE",
+        "CERTIFICO O REGISTRO EM 10/05/2022 14:30 SOB Nº 20221234567.",
+        "PROTOCOLO 221234567 - 10/05/2022",
+        "Página 1 de 5",
+        "Página 2 de 5",
+        "Página 3 de 5",
+        "OITAVA ALTERAÇÃO CONTRATUAL DA SOCIEDADE EMPRESÁRIA LIMITADA",
+        N,
+        `CNPJ: ${formatarCnpj(CNPJ)}`,
+        "Cascavel/PR, 20 de fevereiro de 2026.",
+      ].join("\n");
+
+      const { r, c } = await carregaCom([arquivo("a1", "8 oitava alteracao.pdf", texto)]);
+
+      expect(r.falhas).toEqual([]);
+      const cliente = c.clientes[0] as { alteracoes: { numero: number }[] };
+      expect(cliente.alteracoes.map((a) => a.numero)).toEqual([8]);
+      expect(r.carregadas.map((x) => x.empresa)).toEqual([N]);
+    });
+
+    it("reconhece 'CONTRATO DE CONSTITUIÇÃO' como contrato, mesmo sem a palavra 'social' no título", async () => {
+      const texto = [N, "CONTRATO DE CONSTITUIÇÃO", "VIVIANE RENATA, brasileira, empresária", `“${N}”, inscrita no CNPJ ${formatarCnpj(CNPJ)}`].join("\n");
+
+      const { r } = await carregaCom([arquivo("a1", "0 contrato social.pdf", texto)]);
+
+      expect(r.falhas).toEqual([]);
+      expect(r.carregadas.map((x) => x.empresa)).toEqual([N]);
+    });
+
     it("reconhece o contrato de constituição que abre pelo sócio, sem título, pela CLÁUSULA PRIMEIRA", async () => {
       const texto = [
         "EVILASIO DE CARVALHO JUNIOR, brasileiro, nascido no dia 10 de setembro de 1980, natural da Cidade de Cascavel",
@@ -659,6 +690,8 @@ describe("executarImportacao", () => {
       ["página de portal", "Alteração\nMatriz\nSolicitação concluída com sucesso!"],
       ["e-mail", "Bom dia. Preciso de uma atualização de dados\nPrezado(a), A Jucesp adota os procedimentos"],
       ["manual", "PARA ALTERAÇÃO:\nQUANDO FOR ESCRITORIO ADM\nALTERAÇÃO DO TIPO DE UNIDADE"],
+      ["pedido da Receita Estadual", "ESTADO DO PARANÁ\nSecretaria de Estado da Fazenda\nReceita Estadual\nPEDIDO DE ALTERAÇÃO DE CONTADOR\nCNPJ 11.222.333/0001-81"],
+      ["consulta QSA", "Consulta Quadro de Sócios e Administradores - QSA\nCNPJ: 11.222.333/0001-81\nNome Empresarial: ACME LTDA"],
     ])("não trata %s como alteração contratual, só por conter a palavra 'alteração'", async (_caso, texto) => {
       const { r } = await carregaCom([arquivo("a1", "outro.pdf", texto)]);
 

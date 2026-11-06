@@ -7,6 +7,8 @@ export function cnpjsDoTexto(texto: string): string[] {
   return [...texto.matchAll(CNPJ)].map((m) => soDigitos(m[0]));
 }
 
+const semAcento = (s: string) => s.normalize("NFD").replace(/\p{Diacritic}/gu, "");
+
 /** Nome entre aspas no corpo ("NOME LTDA", com sede...), que é como os contratos reais o escrevem. */
 const NOME_ENTRE_ASPAS = /[“"]([^”"\n]{3,120}?\s(?:LTDA|EIRELI|S\/A|S\.A\.|EPP|ME|SS|MEI))\.?[”"]/i;
 
@@ -24,12 +26,63 @@ const LINHA_DE_NOME = /^(.{3,120}?\s(?:LTDA|EIRELI|S\/A|S\.A\.|EPP|ME|SS|MEI))\.
 /** Empresário individual: nome completo seguido do CPF (11 dígitos), sem forma societária. */
 const NOME_E_CPF = /(?:^|-\s*)([A-ZÀ-Ú][A-ZÀ-Ú ]{5,80}?)\s+\d{11}\b/;
 
+/**
+ * O título fica nas primeiras linhas, mas pode vir atrás do carimbo da Junta ("CERTIFICO O REGISTRO EM...")
+ * e de cabeçalhos de página ("Página 1 de 5"); por isso a busca olha uma janela maior do documento.
+ */
+const JANELA = 60;
+
+/** Linha de título de alteração: "ALTERAÇÃO" no começo (após ordinal), com palavra de contrato na mesma linha. */
+const TITULO_DE_ALTERACAO = /^(?:[#\d]+\s*[ªº°A]?\s*|[A-Z]+\s+){0,3}ALTERACAO\b.*(?:CONTRAT|SOCIAL|INSTRUMENTO|INDIVIDUAL)/;
+/** Linha de título de contrato: começa por "CONTRATO SOCIAL" ou "CONTRATO DE CONSTITUIÇÃO". */
+const TITULO_DE_CONTRATO = /^(?:[#\d]+\s*)?CONTRATO (?:SOCIAL|DE CONSTITUICAO)\b/;
+
+type Tipo = "contrato" | "alteracao" | "cnpj" | "outro";
+type Classificacao = { tipo: Tipo; /** índice (nas linhas não vazias) da linha de título, ou -1 */ indice: number; linhas: string[] };
+
+/** O título decide o tipo; a palavra solta no corpo não conta. */
+function classificar(texto: string): Classificacao {
+  const originais = texto.split("\n").map((l) => l.trim()).filter(Boolean);
+  const todas = originais.map((l) => semAcento(l).toUpperCase());
+  const resultado = (tipo: Tipo, indice = -1): Classificacao => ({ tipo, indice, linhas: originais });
+
+  // Comprovante de Inscrição e de Situação Cadastral (cartão CNPJ): prova o CNPJ e traz o nome empresarial.
+  const cabecalho = todas.slice(0, 12).join(" ");
+  if (/COMPROVANTE DE INSCRICAO E DE SITUACAO/.test(cabecalho) && /CADASTRO NACIONAL DA PESSOA JURIDICA/.test(cabecalho)) {
+    return resultado("cnpj");
+  }
+
+  const janela = todas.slice(0, JANELA);
+  const iAlteracao = janela.findIndex((l) => TITULO_DE_ALTERACAO.test(l));
+  if (iAlteracao >= 0) return resultado("alteracao", iAlteracao);
+  const tituloJunto = todas.slice(0, 3).join(" ");
+  if (/ALTERACAO\b.*(CONTRAT|SOCIAL|INSTRUMENTO|INDIVIDUAL)/.test(tituloJunto)) {
+    return resultado("alteracao", todas.slice(0, 3).findIndex((l) => l.includes("ALTERACAO")));
+  }
+  // CLÁUSULA separa instrumento de verdade de página de portal, e-mail ou manual que só citam "alteração".
+  const topo = todas.slice(0, 8).join(" ");
+  if (/\bCLAUSULA\b/.test(todas.join(" ")) && /MOTIVOS:|CONSOLIDACAO CONTRATUAL|\bALTERACAO\b/.test(topo)) return resultado("alteracao");
+
+  const iContrato = janela.findIndex((l) => TITULO_DE_CONTRATO.test(l));
+  if (iContrato >= 0) return resultado("contrato", iContrato);
+  if (tituloJunto.includes("CONTRATO SOCIAL")) return resultado("contrato");
+  // Constituição sem título: abre pela qualificação dos sócios e declara a denominação na CLÁUSULA PRIMEIRA.
+  if (/CLAUSULA PRIMEIRA.*(DENOMINACAO EMPRESARIAL|NOME EMPRESARIAL)/.test(topo)) return resultado("contrato");
+  return resultado("outro");
+}
+
+export function tipoDoDocumento(texto: string): Tipo {
+  return classificar(texto).tipo;
+}
+
 export function nomeEmpresarial(texto: string): string | null {
   const entreAspas = texto.match(NOME_ENTRE_ASPAS)?.[1]?.trim();
   if (entreAspas) return entreAspas;
   const declarado = texto.match(NOME_EMPRESARIAL_DECLARADO)?.[1]?.trim();
   if (declarado) return declarado;
-  const inicio = texto.split("\n").map((l) => l.trim()).filter(Boolean).slice(0, 6);
+  // Sem aspas, o nome fica perto do título (logo abaixo dele), e não perto do carimbo da Junta.
+  const { indice, linhas } = classificar(texto);
+  const inicio = linhas.slice(Math.max(indice, 0), Math.max(indice, 0) + 6);
   const eiTitulo = inicio.findIndex((l) => /EMPRES[AÁ]RIO INDIVIDUAL/i.test(l));
   const abaixoDoTitulo = eiTitulo >= 0 && eiTitulo < 3 ? inicio[eiTitulo + 1] : undefined;
   if (abaixoDoTitulo && abaixoDoTitulo.length <= 80 && !/\d|CNPJ|NIRE/i.test(abaixoDoTitulo)) return abaixoDoTitulo;
@@ -41,34 +94,6 @@ export function nomeEmpresarial(texto: string): string | null {
   return null;
 }
 
-const semAcento = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-
-/** O título nas primeiras linhas decide o tipo; a palavra solta no corpo não conta. */
-export function tipoDoDocumento(texto: string): "contrato" | "alteracao" | "cnpj" | "outro" {
-  const todas = texto.split("\n").map((l) => semAcento(l.trim()).toUpperCase()).filter(Boolean);
-  // Comprovante de Inscrição e de Situação Cadastral (cartão CNPJ): prova o CNPJ e traz o nome empresarial.
-  const cabecalho = todas.slice(0, 12).join(" ");
-  if (/COMPROVANTE DE INSCRICAO E DE SITUACAO/.test(cabecalho) && /CADASTRO NACIONAL DA PESSOA JURIDICA/.test(cabecalho)) {
-    return "cnpj";
-  }
-  const titulo = todas.slice(0, 3);
-  const tituloJunto = titulo.join(" ");
-  const topo = todas.slice(0, 8).join(" ");
-  // CLÁUSULA separa instrumento de verdade de página de portal, e-mail ou manual que só citam "alteração".
-  const temClausulas = /\bCLAUSULA\b/.test(todas.join(" "));
-  if (titulo.some((l) => TITULO_DE_ALTERACAO.test(l)) || /ALTERACAO\b.*(CONTRAT|SOCIAL|INSTRUMENTO|INDIVIDUAL)/.test(tituloJunto)) {
-    return "alteracao";
-  }
-  if (temClausulas && /MOTIVOS:|CONSOLIDACAO CONTRATUAL|\bALTERACAO\b/.test(topo)) return "alteracao";
-  if (tituloJunto.includes("CONTRATO SOCIAL")) return "contrato";
-  // Constituição sem título: abre pela qualificação dos sócios e declara a denominação na CLÁUSULA PRIMEIRA.
-  if (/CLAUSULA PRIMEIRA.*(DENOMINACAO EMPRESARIAL|NOME EMPRESARIAL)/.test(topo)) return "contrato";
-  return "outro";
-}
-
-/** Linha de título de alteração: "ALTERAÇÃO" no começo (após ordinal), com palavra de contrato na mesma linha. */
-const TITULO_DE_ALTERACAO = /^(?:[#\d]+\s*[ªº°A]?\s*|[A-Z]+\s+){0,3}ALTERACAO\b.*(?:CONTRAT|SOCIAL|INSTRUMENTO|INDIVIDUAL)/;
-
 const UNIDADES: Record<string, number> = {
   PRIMEIRA: 1, SEGUNDA: 2, TERCEIRA: 3, QUARTA: 4, QUINTA: 5, SEXTA: 6, SETIMA: 7, OITAVA: 8, NONA: 9,
 };
@@ -76,9 +101,10 @@ const DEZENAS: Record<string, number> = {
   DECIMA: 10, VIGESIMA: 20, TRIGESIMA: 30, QUADRAGESIMA: 40, QUINQUAGESIMA: 50,
 };
 
-/** Número da alteração no título ("3ª", "SEGUNDA", "DÉCIMA PRIMEIRA"); null se não houver. */
+/** Número da alteração na linha do título ("3ª", "SEGUNDA", "DÉCIMA PRIMEIRA"); null se não houver. */
 export function numeroDoConteudo(texto: string): number | null {
-  const titulo = semAcento(texto.split("\n").slice(0, 3).join(" ")).toUpperCase();
+  const { indice, linhas } = classificar(texto);
+  const titulo = semAcento(indice >= 0 ? linhas[indice]! : linhas.slice(0, 3).join(" ")).toUpperCase();
   const antes = titulo.split("ALTERACAO")[0] ?? "";
   const digitos = antes.match(/(\d+)\s*[ªº°A]?\s*$/);
   if (digitos) return Number(digitos[1]);
