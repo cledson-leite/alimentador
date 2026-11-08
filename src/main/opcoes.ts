@@ -5,6 +5,7 @@ export type Opcoes = {
   producao: boolean;
   permitirApi: boolean;
   semOcr: boolean;
+  maxApi: number;
   regimes: string;
   ocrCache: string;
   cnpjs: string[] | undefined;
@@ -25,6 +26,7 @@ export function lerOpcoes(argv: string[]): Opcoes {
       producao: { type: "boolean", default: false },
       "permitir-api": { type: "boolean", default: false },
       "sem-ocr": { type: "boolean", default: false },
+      "max-api": { type: "string", default: "200" },
       regimes: { type: "string", default: "saida/sem-regime-prontas-para-confirmar.csv" },
       "ocr-cache": { type: "string", default: "C:/dados/ocr-cache" },
       cnpj: { type: "string" },
@@ -36,6 +38,7 @@ export function lerOpcoes(argv: string[]): Opcoes {
     },
     strict: true,
   });
+  if (!Number.isInteger(Number(values["max-api"])) || Number(values["max-api"]) < 0) throw new Error("--max-api aceita um inteiro maior ou igual a zero.");
   const cnpjs = values.cnpj?.split(",").map((c) => c.replace(/\D/g, ""));
   if (cnpjs?.some((c) => c.length !== 14)) throw new Error("--cnpj aceita só CNPJs de 14 dígitos, separados por vírgula.");
   return {
@@ -43,6 +46,7 @@ export function lerOpcoes(argv: string[]): Opcoes {
     producao: values.producao,
     permitirApi: values["permitir-api"],
     semOcr: values["sem-ocr"],
+    maxApi: Number(values["max-api"]),
     regimes: values.regimes,
     ocrCache: values["ocr-cache"],
     cnpjs,

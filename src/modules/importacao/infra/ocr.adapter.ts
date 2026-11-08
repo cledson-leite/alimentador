@@ -17,7 +17,7 @@ export type OpcoesOcr = {
   cache: string;
 };
 
-function paginasParaLer(total: number): number[] {
+export function paginasParaLer(total: number): number[] {
   const todas = Array.from({ length: total }, (_, i) => i + 1);
   if (total <= PAGINAS_DO_INICIO + PAGINAS_DO_FIM) return todas;
   return [...todas.slice(0, PAGINAS_DO_INICIO), ...todas.slice(-PAGINAS_DO_FIM)];

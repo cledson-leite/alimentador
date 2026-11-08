@@ -8,6 +8,7 @@
     "importar": "tsx src/main/cli.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.6.0",
     "@napi-rs/canvas": "^1.1.0",
     "@supabase/supabase-js": "^2.119.0",
     "mammoth": "^1.13.0",

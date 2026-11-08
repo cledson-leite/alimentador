@@ -9,6 +9,7 @@ import { validarAmbiente } from "../modules/importacao/domain/ambiente";
 import { cadastroSupabase, conferirSchema } from "../modules/importacao/infra/cadastro.adapter";
 import { documentosDoDisco } from "../modules/importacao/infra/documentos.adapter";
 import { leitorDeArquivos } from "../modules/importacao/infra/leitor.adapter";
+import { leitorComModelo } from "../modules/importacao/infra/modelo.adapter";
 import { leitorComOcr } from "../modules/importacao/infra/ocr.adapter";
 import { planilhasXlsx } from "../modules/importacao/infra/planilhas.adapter";
 import { pastaPorCnpjDoEstado } from "../modules/importacao/infra/estado-final.parser";
@@ -33,7 +34,6 @@ function lerPastaPorCnpj(arquivo: string): Map<string, string> | undefined {
 
 async function principal() {
   const op = lerOpcoes(process.argv.slice(2));
-  if (op.permitirApi) throw new Error("--permitir-api ainda não foi implementado (segunda leitura pelo modelo).");
 
   let cadastro = SEM_EFEITO;
   if (!op.dryRun) {
@@ -59,7 +59,11 @@ async function principal() {
   if (regimesManuais) console.log(`Regimes manuais lidos de ${op.regimes}: ${regimesManuais.size}`);
 
   // OCR é local (Tesseract na própria máquina) e só roda onde a leitura normal não basta.
-  const leitor = op.semOcr ? { ...leitorDeArquivos(), encerrar: async () => {} } : leitorComOcr(leitorDeArquivos(), { cache: op.ocrCache });
+  const comOcr = op.semOcr ? { ...leitorDeArquivos(), encerrar: async () => {} } : leitorComOcr(leitorDeArquivos(), { cache: op.ocrCache });
+  // Segunda leitura pelo modelo: só com --permitir-api, só para o que o OCR não leu. No dry-run só conta, nada é enviado.
+  const apiKey = op.permitirApi && !op.dryRun ? carregarEnv().ANTHROPIC_API_KEY : undefined;
+  if (op.permitirApi && !op.dryRun && !apiKey) throw new Error("--permitir-api exige ANTHROPIC_API_KEY no .env.");
+  const leitor = op.permitirApi ? leitorComModelo(comOcr, { maxChamadas: op.maxApi, simular: op.dryRun, apiKey }) : comOcr;
   const resultado = await executarImportacao(
     {
       planilhas: planilhasXlsx({ lista: op.lista, sn: op.sn, tributario: op.tributario }),
@@ -72,6 +76,7 @@ async function principal() {
     { cnpjs: op.cnpjs },
   );
   await leitor.encerrar();
+  if (op.permitirApi) console.log(`${op.dryRun ? "[dry-run] arquivos que iriam" : "Arquivos enviados"} ao modelo: ${(leitor as ReturnType<typeof leitorComModelo>).chamadas()}`);
   await escreverSaidas(op.saida, resultado);
 
   console.log(

@@ -151,9 +151,23 @@ export function numeroDoConteudo(texto: string): number | null {
   return total > 0 ? total : null;
 }
 
+/** "0 ALTERAÇÃO..." : o 0 é a ordem de arquivamento do escritório e marca o documento-base (ex.: transformação em sociedade). */
+export const ehDocumentoBase = (nomeArquivo: string) => Number(nomeArquivo.match(/\d+/)?.[0]) === 0;
+
+/**
+ * Número no começo do nome ("2 PRIMEIRA ALTERAÇÃO...", "02_Alteracao..."): é a sequência de arquivamento do escritório,
+ * única na pasta. O ordinal do título recomeça a cada transformação societária e por isso colide. Zero não conta.
+ */
+export function numeroInicialDoNome(nomeArquivo: string): number | null {
+  const m = nomeArquivo.match(/^\s*(\d{1,3})(?=[\s._)ºª-])/);
+  return m && Number(m[1]) > 0 ? Number(m[1]) : null;
+}
+
 export function numeroDoNome(nomeArquivo: string): number | null {
-  const m = nomeArquivo.match(/\d+/);
-  return m ? Number(m[0]) : null;
+  const m = nomeArquivo.match(/(?<!\d)\d{1,3}(?!\d)/); // protocolos e carimbos de hora (muitos dígitos) não são número de alteração
+  // "0 ALTERAÇÃO..." é só a ordem de arquivamento do escritório, não número de alteração (o banco exige número > 0):
+  // vale como sem número, ou seja, 1.
+  return m && Number(m[0]) > 0 ? Number(m[0]) : null;
 }
 
 const MESES = ["janeiro", "fevereiro", "marco", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];

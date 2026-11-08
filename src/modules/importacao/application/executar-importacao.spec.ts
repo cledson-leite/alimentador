@@ -571,9 +571,9 @@ describe("executarImportacao", () => {
           nome: N,
           arquivos: [
             arquivo("a0", "contrato social.pdf", textoContrato(N, CNPJ)),
-            arquivo("a1", "1 alteração.pdf", textoAlteracao(N, CNPJ, "PRIMEIRA", "10 de maio de 2022")),
+            arquivo("a1", "alteração.pdf", textoAlteracao(N, CNPJ, "PRIMEIRA", "10 de maio de 2022")),
             arquivo("a2", "2 alteracao.pdf", textoAlteracao(N, CNPJ, "SEGUNDA", "20 de agosto de 2023")),
-            arquivo("a3", "1  ALTERAÇÃO.pdf", textoAlteracao(N, CNPJ, "TERCEIRA", "20 de agosto de 2024")),
+            arquivo("a3", "ALTERAÇÃO.pdf", textoAlteracao(N, CNPJ, "TERCEIRA", "20 de agosto de 2024")),
           ],
         },
       ],
@@ -1186,6 +1186,38 @@ describe("executarImportacao", () => {
       expect(r.falhas[0]).toMatchObject({ etapa: "documentos" });
     });
 
+    it("chama o modelo só para o arquivo que o OCR não leu (devolveu nada)", async () => {
+      const c = montar({
+        lista: [{ nome: N, cnpj: CNPJ }],
+        sn: [CNPJ],
+        pastas: [{ nome: N, arquivos: [arquivo("a1", "0 CONTRATO SOCIAL.pdf", "Página 1 de 3")] }],
+        semTexto: ["a1"],
+        ocr: {},
+        modelo: { a1: textoContrato(N, CNPJ) },
+      });
+
+      const r = await executarImportacao(c.portas, {});
+
+      expect(r.falhas).toEqual([]);
+      expect(c.modeloChamadas).toEqual(["a1"]);
+    });
+
+    it("não manda ao modelo o que o OCR leu e não é contrato (RG lido, por exemplo)", async () => {
+      const c = montar({
+        lista: [{ nome: N, cnpj: CNPJ }],
+        sn: [CNPJ],
+        pastas: [{ nome: N, arquivos: [arquivo("a1", "0 CONTRATO SOCIAL.pdf", "x")] }],
+        semTexto: ["a1"],
+        ocr: { a1: "REGISTRO GERAL" },
+        modelo: { a1: textoContrato(N, CNPJ) },
+      });
+
+      const r = await executarImportacao(c.portas, {});
+
+      expect(c.modeloChamadas).toEqual([]);
+      expect(r.falhas[0]).toMatchObject({ etapa: "documentos" });
+    });
+
     it("sem OCR disponível, os arquivos ilegíveis seguem como não lidos", async () => {
       const c = montar({
         lista: [{ nome: N, cnpj: CNPJ }],
@@ -1199,6 +1231,98 @@ describe("executarImportacao", () => {
       expect(r.carregadas).toEqual([]);
       expect(r.falhas[0]).toMatchObject({ etapa: "documentos" });
     });
+  });
+
+  it("trata o 0 do nome do arquivo ('0 ALTERAÇÃO...') como sem número: vale 1, nunca 0 (o banco exige número > 0)", async () => {
+    const c = montar({
+      lista: [{ nome: N, cnpj: CNPJ }],
+      sn: [CNPJ],
+      pastas: [{ nome: N, arquivos: [arquivo("a1", "0 ALTERAÇÃO POR TRANSFORMAÇÃO.pdf", textoAlteracao(N, CNPJ, "", "10 de maio de 2022"))] }],
+    });
+
+    const r = await executarImportacao(c.portas, {});
+
+    expect(r.falhas).toEqual([]);
+    expect(c.clientes[0]).toMatchObject({ alteracoes: [expect.objectContaining({ numero: 1 })] });
+  });
+
+  it("com outras alterações, o '0 ALTERAÇÃO...' é só o contrato social e não entra na numeração", async () => {
+    const c = montar({
+      lista: [{ nome: N, cnpj: CNPJ }],
+      sn: [CNPJ],
+      pastas: [
+        {
+          nome: N,
+          arquivos: [
+            arquivo("a0", "0 ALTERAÇÃO POR TRANSFORMAÇÃO.pdf", textoAlteracao(N, CNPJ, "", "10 de maio de 2022")),
+            arquivo("a1", "1 PRIMEIRA ALTERAÇÃO.pdf", textoAlteracao(N, CNPJ, "PRIMEIRA", "20 de junho de 2023")),
+          ],
+        },
+      ],
+    });
+
+    const r = await executarImportacao(c.portas, {});
+
+    expect(r.falhas).toEqual([]);
+    expect(c.enviados.map((e) => e.origemId).sort()).toEqual(["a0", "a1"]);
+    expect(c.clientes[0]).toMatchObject({ alteracoes: [expect.objectContaining({ numero: 1, data: "2023-06-20" })] });
+  });
+
+  it("o número do começo do nome do arquivo (sequência do escritório) vale mais que o ordinal do título, que recomeça após transformação", async () => {
+    const c = montar({
+      lista: [{ nome: N, cnpj: CNPJ }],
+      sn: [CNPJ],
+      pastas: [
+        {
+          nome: N,
+          arquivos: [
+            arquivo("a1", "1 ALTERAÇÃO POR TRANSFORMAÇÃO.pdf", textoAlteracao(N, CNPJ, "", "10 de maio de 2022")),
+            arquivo("a2", "2 PRIMEIRA ALTERAÇÃO CONTRATUAL.pdf", textoAlteracao(N, CNPJ, "PRIMEIRA", "20 de junho de 2023")),
+          ],
+        },
+      ],
+    });
+
+    const r = await executarImportacao(c.portas, {});
+
+    expect(r.falhas).toEqual([]);
+    expect(c.clientes[0]).toMatchObject({ alteracoes: [expect.objectContaining({ numero: 1 }), expect.objectContaining({ numero: 2 })] });
+  });
+
+  it("PDF sem número e DOCX numerado no mesmo dia são o mesmo documento: vale o PDF", async () => {
+    const c = montar({
+      lista: [{ nome: N, cnpj: CNPJ }],
+      sn: [CNPJ],
+      pastas: [
+        {
+          nome: N,
+          arquivos: [
+            arquivo("a0", "contrato social.pdf", textoContrato(N, CNPJ)),
+            arquivo("a1", "1 ALTERAÇÃO CONTRATUAL.docx", textoAlteracao(N, CNPJ, "", "10 de maio de 2022"), "docx"),
+            arquivo("a2", "MINUTA ALTERAÇÃO.pdf", textoAlteracao(N, CNPJ, "", "10 de maio de 2022")),
+          ],
+        },
+      ],
+    });
+
+    const r = await executarImportacao(c.portas, {});
+
+    expect(r.falhas).toEqual([]);
+    expect(c.clientes[0]).toMatchObject({ alteracoes: [expect.objectContaining({ numero: 1 })] });
+    expect(c.enviados.map((e) => e.origemId)).toEqual(["a0", "a2"]);
+  });
+
+  it("número enorme no nome do arquivo (carimbo de hora, protocolo) não é número de alteração: vale 1", async () => {
+    const c = montar({
+      lista: [{ nome: N, cnpj: CNPJ }],
+      sn: [CNPJ],
+      pastas: [{ nome: N, arquivos: [arquivo("a1", "ALTERAÇÃO CONTRATUAL 20200803172642.pdf", textoAlteracao(N, CNPJ, "", "10 de maio de 2022"))] }],
+    });
+
+    const r = await executarImportacao(c.portas, {});
+
+    expect(r.falhas).toEqual([]);
+    expect(c.clientes[0]).toMatchObject({ alteracoes: [expect.objectContaining({ numero: 1 })] });
   });
 
   describe("a mesma alteração em mais de um arquivo", () => {

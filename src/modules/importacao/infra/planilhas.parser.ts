@@ -35,3 +35,32 @@ export function regimesDoTributario(rows: Linhas): Map<string, "lucro_presumido"
   }
   return mapa;
 }
+
+/** Anotações do escritório no nome ("(SAIU 01/08)", "- BAIXADA 10/26", "- vai movimentar em 2027"): não fazem parte da razão social. */
+const ANOTACAO = /\s*\(.*$|(?:\s+|\s*-\s*)(?:saiu|baixad[ao]|inicia|iniciou|vai movimentar|n[aã]o faz|regime|a partir)\b.*$/i;
+const FORA_DA_CARGA = /associa[cç][aã]o|condom[ií]nio|cart[oó]rio|tabeli/i;
+
+/**
+ * Empresas que só constam na planilha SN ou na tributária (e não na Lista de empresas): também são carregadas, com o
+ * nome da planilha sem as anotações. CNPJ com mais de um nome nas planilhas é conflito e fica de fora; associações,
+ * condomínios e cartórios seguem fora da carga.
+ */
+export function empresasForaDaLista(sn: Linhas, tributario: Linhas, naLista: Set<string>): LinhaLista[] {
+  const cab = sn.findIndex((r) => r.some((c) => texto(c).toUpperCase() === "CNPJ"));
+  const col = cab < 0 ? -1 : sn[cab]!.findIndex((c) => texto(c).toUpperCase() === "CNPJ");
+  const nomes = new Map<string, Set<string>>();
+  const anotar = (cnpj: string, nome: string) => {
+    if (cnpj.length !== 14 || naLista.has(cnpj)) return;
+    nomes.set(cnpj, (nomes.get(cnpj) ?? new Set()).add(nome.replace(ANOTACAO, "").replace(/\s+/g, " ").trim()));
+  };
+  if (col > 0) for (const r of sn.slice(cab + 1)) anotar(soDigitos(texto(r[col])), texto(r[col - 1]));
+  const regimes = regimesDoTributario(tributario);
+  for (const r of tributario) {
+    const cnpj = soDigitos(texto(r[0]));
+    if (regimes.get(cnpj) && regimes.get(cnpj) !== "ignorada") anotar(cnpj, texto(r[1]));
+  }
+  return [...nomes]
+    .filter(([, n]) => n.size === 1)
+    .map(([cnpj, n]) => ({ nome: [...n][0]!, cnpj }))
+    .filter((l) => l.nome !== "" && !FORA_DA_CARGA.test(l.nome));
+}

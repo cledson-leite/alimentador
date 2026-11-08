@@ -11,7 +11,8 @@ Spec: [`docs/specs/importador-clientes.md`](specs/importador-clientes.md) · Glo
 - **Só três informações contam, nas três fontes: CNPJ, nome/razão social e regime.** Qualquer outra coluna das planilhas é **ignorada** (ex.: a coluna da inscrição estadual, onde aparecia "BAIXOU": a empresa marcada assim é carregada normalmente pelo regime que a planilha traz).
 - Sem regime em nenhuma das duas: **não carrega**, vai para `regime-a-confirmar.csv`. **OUTRAS ENT.** é ignorada.
 - **Regime informado manualmente** (terceira fonte, só para quem não tem regime nas planilhas): o usuário preenche a coluna "regime" do arquivo `saida/sem-regime-prontas-para-confirmar.csv` (`simples_nacional`, `lucro_presumido` ou `lucro_real`) e o importador o lê por `--regimes <arquivo>` (esse arquivo é o padrão). O regime da SN e do tributário **sempre vence** o manual. Linha em branco = continua sem regime. Valor inválido ou CNPJ malformado **interrompe a execução** com a lista das linhas, sem gravar nada.
-- **Fora da carga:** pessoas físicas (CPF) em `pessoas-fisicas.csv`; condomínios, associações, cartórios e tabelionatos; empresas que só existem nas planilhas e não estão na lista (SN 41, Tributário 7); a planilha de controle de alterações (cobre ~2%).
+- **Empresas só nas planilhas:** a empresa que consta na SN ou na Tributária e **não** na Lista de empresas **também é carregada** (decisão do usuário), com o nome da planilha sem as anotações do escritório ("(SAIU 01/08)", "- BAIXADA 10/26"...). CNPJ com dois nomes diferentes nas planilhas é conflito e fica de fora; associação, condomínio e cartório seguem fora da carga. Para elas o Drive é baixado só com **contrato social e alterações** (mais o comprovante de CNPJ, lido só para conferência: ele predomina sobre o CNPJ citado no contrato).
+- **Fora da carga:** pessoas físicas (CPF) em `pessoas-fisicas.csv`; condomínios, associações, cartórios e tabelionatos; a planilha de controle de alterações (cobre ~2%).
 - CNPJ repetido na lista: carrega uma vez só.
 
 ## 2. Pasta do Drive
@@ -37,6 +38,7 @@ Spec: [`docs/specs/importador-clientes.md`](specs/importador-clientes.md) · Glo
 
 - Em contrato e alteração compara-se a **raiz de 8 dígitos** (eles citam a matriz). No **comprovante** exige-se o **CNPJ idêntico** (14 dígitos): **filial é outra empresa**, com CNPJ próprio, e o comprovante da matriz não prova a linha da filial.
 - CNPJ **diferente** no documento reprova (divergência).
+- **Número no nome do arquivo:** "0" (ex.: "0 ALTERAÇÃO POR TRANSFORMAÇÃO") é só a ordem de arquivamento do escritório e marca o **documento-base**. Havendo outras alterações, ele é só o **contrato social** (PDF primeiro) e não entra na numeração; sozinho, vale como alteração 1 (o banco exige número > 0).
 - CNPJ **ausente** nos documentos **não reprova**: a empresa está na lista, com CNPJ e razão social, tem regime e pasta no Drive, então **vale o CNPJ da lista**. (Corrige o ticket 07, que mandava para falhas.)
 - CNPJ da lista com dígito verificador inválido reprova antes de tocar o Storage.
 
@@ -46,7 +48,8 @@ O `empresa` gravado é sempre a **razão social da lista**, sem as anotações d
 
 ## 6. Alterações: número, data e duplicatas
 
-- **Número:** do conteúdo (título), senão do nome do arquivo, senão 1. Duas ou mais sem número reprova.
+- **Número:** o do **começo do nome do arquivo** ("2 PRIMEIRA ALTERAÇÃO...", "02_Alteracao...": sequência do escritório, única na pasta), senão o do conteúdo (título), senão o de qualquer número no nome, senão 1. O ordinal do título recomeça a cada transformação societária e por isso colide. Duas ou mais sem número reprova.
+- **Cópia em outro formato:** além do mesmo número, vale também o **mesmo dia com um dos dois sem número** (minuta em PDF sem prefixo + versão numerada em DOCX): é um documento só, vale o PDF e ele herda o número da cópia.
 - **Sequência quebrada NÃO é falha** (o usuário nunca decidiu isso): a pasta pode ter só as alterações mais recentes e elas são gravadas com os números lidos.
 - **PDF predomina:** a mesma alteração em PDF e em DOC/DOCX (mesmo número) conta **uma vez**, vale o PDF, **mesmo que a leitura traga datas diferentes**. Dois PDFs com o mesmo número e datas diferentes reprovam.
 - **Data:** só se exige da **alteração**. Contrato social, constituição e comprovante **não precisam de data**. É a **última linha de data** do documento, no formato "dia de mês de ano": a **cidade e o estado são ignorados** (qualquer cidade, UF com barra, hífen, parênteses ou sem UF), pontuação no fim é tolerada e a data pode vir quebrada em duas linhas. Não pode ser futura.
@@ -60,7 +63,7 @@ Só o **comprovante de CNPJ** na pasta: a empresa é cadastrada **sem contrato e
 
 - Texto digital: PDF, DOCX e DOC. Texto ilegível (fonte sem mapeamento de caracteres) é tratado como **sem texto**.
 - **OCR local** (Tesseract em português, dentro do projeto): só quando a leitura normal não basta, e só em arquivo que pelo nome parece contrato, alteração ou CNPJ (nunca RG, CNH etc.). Tudo lido por OCR passa pelas mesmas regras. `--sem-ocr` desliga. Documentos longos: 8 primeiras e 4 últimas páginas.
-- **Segunda leitura por modelo (Sonnet, ticket 06): NÃO implementada.** `--permitir-api` é recusada. Nenhum documento sai da máquina.
+- **Segunda leitura pelo modelo** (Sonnet 5.5, esforço médio, `claude-sonnet-5-5`): só com `--permitir-api` e `ANTHROPIC_API_KEY` no `.env`, e só para o arquivo pertinente que nem o OCR leu (devolveu nada). O modelo transcreve as páginas (8 primeiras e 4 últimas, em memória, nada vai a disco nem a log) e o texto passa pelas mesmas regras. Arquivo que o OCR leu e não é contrato (RG, CNH...) **nunca** é enviado. Recusa, resposta cortada ou ilegível = sem texto. `--max-api <n>` (padrão 200) é o teto de chamadas; estourar aborta a execução. `--dry-run --permitir-api` só conta quantos arquivos iriam, sem enviar. (Substitui o desenho de recortes e mascaramento do ticket 06, que não se aplica a quem o OCR não leu.) Antes da carga real, conferir a política de retenção de dados da conta na Anthropic.
 
 ## 9. Download complementar do Drive
 

@@ -3,7 +3,9 @@ import { randomUUID } from "node:crypto";
 import {
   cnpjsDoTexto,
   datasFinais,
+  ehDocumentoBase,
   numeroDoConteudo,
+  numeroInicialDoNome,
   numeroDoNome,
   raiz,
   semAcento,
@@ -122,7 +124,8 @@ async function completarComOcr(portas: Portas, cnpj: string, { lidos, pendentes 
   if (!precisa || !portas.leitor.lerComOcr) return lidos;
   const resultado = [...lidos];
   for (const arquivo of pendentes) {
-    const texto = await portas.leitor.lerComOcr(arquivo);
+    // O modelo só vê o que o OCR não leu: texto lido que não é contrato (RG, CNH...) nunca é enviado.
+    const texto = (await portas.leitor.lerComOcr(arquivo)) ?? (await portas.leitor.lerComModelo?.(arquivo)) ?? null;
     const tipo = texto ? tipoDoDocumento(texto) : "outro";
     if (texto && tipo !== "outro") resultado.push({ arquivo, texto, tipo });
   }
@@ -197,7 +200,11 @@ async function carregar(
   const filial = cnpj.slice(8, 12) !== "0001" ? nomeLista.match(/\bfilial\b.*$/i)?.[0] : undefined;
   const empresa = filial ? `${nomeDoDocumento} - ${filial.toUpperCase()}` : nomeDoDocumento;
 
-  const alteracoes = numerar(lidos.filter((l) => l.tipo === "alteracao"));
+  // Documento-base ("0 ALTERAÇÃO..."): havendo outras alterações, ele é só o contrato social e não entra na numeração.
+  const todasAlteracoes = lidos.filter((l) => l.tipo === "alteracao");
+  const base = (l: Lido) => numeroDoConteudo(l.texto) === null && ehDocumentoBase(l.arquivo.nome);
+  const bases = todasAlteracoes.some((l) => !base(l)) ? todasAlteracoes.filter(base) : [];
+  const alteracoes = numerar(todasAlteracoes.filter((l) => !bases.includes(l)));
 
   const id = randomUUID();
   const enviados: string[] = [];
@@ -212,7 +219,7 @@ async function carregar(
 
   try {
     // Só o comprovante de CNPJ: a empresa é cadastrada sem contrato e sem alterações, e nada vai ao Storage.
-    const doContrato = contrato ?? alteracoes.at(-1)?.lido;
+    const doContrato = contrato ?? bases.find((l) => l.arquivo.formato === "pdf") ?? bases[0] ?? alteracoes.at(-1)?.lido;
     const contratoCaminho = doContrato ? await subir("contrato-social", doContrato.arquivo) : null;
     const itens = [];
     for (const a of alteracoes) {
@@ -238,15 +245,26 @@ function numerar(alteracoes: Lido[]) {
     const datas = datasFinais(lido.texto);
     if (datas.length !== 1) throw new FalhaDeEmpresa("data", "data da alteração ausente ou ambígua");
     if (datas[0]! > hoje()) throw new FalhaDeEmpresa("data", "data da alteração no futuro");
-    return { lido, data: datas[0]!, numero: numeroDoConteudo(lido.texto) ?? numeroDoNome(lido.arquivo.nome) };
+    return { lido, data: datas[0]!, numero: numeroInicialDoNome(lido.arquivo.nome) ?? numeroDoConteudo(lido.texto) ?? numeroDoNome(lido.arquivo.nome) };
   });
   // A mesma alteração costuma estar na pasta em mais de um formato (PDF e DOC): mesmo número e mesma data
   // é um documento só, e vale o formato de melhor leitura. Mesmo número com datas diferentes segue sendo falha.
   const melhorFormato = ["pdf", "docx", "doc", "imagem"];
   // O PDF predomina: DOC/DOCX com o mesmo número de um PDF é cópia dele, mesmo que a leitura traga outra data.
   const semCopiaEmOutroFormato = datados.filter(
-    (d) => d.lido.arquivo.formato === "pdf" || !datados.some((o) => o.lido.arquivo.formato === "pdf" && o.numero === d.numero),
+    (d) =>
+      d.lido.arquivo.formato === "pdf" ||
+      !datados.some(
+        (o) =>
+          o.lido.arquivo.formato === "pdf" &&
+          // Mesmo número, ou mesmo dia com um dos dois sem número (minuta em PDF sem prefixo e a versão numerada em DOCX).
+          (o.numero === d.numero || ((o.numero === null || d.numero === null) && o.data === d.data)),
+      ),
   );
+  // O PDF sem número fica com o número da cópia numerada descartada (mesmo dia).
+  for (const d of semCopiaEmOutroFormato) {
+    d.numero ??= datados.find((o) => o !== d && o.data === d.data && o.numero !== null && !semCopiaEmOutroFormato.includes(o))?.numero ?? null;
+  }
   const unicos = new Map<string, (typeof datados)[number]>();
   for (const d of semCopiaEmOutroFormato) {
     const chave = `${d.numero ?? "sem-numero"}|${d.data}`;

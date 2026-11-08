@@ -54,6 +54,8 @@ export type Cenario = {
   regimesManuais?: Record<string, "simples_nacional" | "lucro_presumido" | "lucro_real">;
   /** Texto que o OCR devolveria por arquivo (id → texto). Sem esta chave o leitor não tem OCR. */
   ocr?: Record<string, string>;
+  /** Texto que a leitura pelo modelo devolveria por arquivo (id → texto). Sem esta chave o leitor não tem modelo. */
+  modelo?: Record<string, string>;
   /** Arquivos cuja leitura normal não traz texto legível (escaneado ou fonte sem mapeamento), mesmo sem OCR. */
   semTexto?: string[];
 };
@@ -76,6 +78,7 @@ export function montar(c: Cenario) {
     listarPastas: async () => (c.pastas ?? []).map(({ nome, arquivos }) => ({ nome, arquivos })),
   };
   const ocrChamadas: string[] = [];
+  const modeloChamadas: string[] = [];
   const semTexto = new Set(c.semTexto ?? []);
   const leitor: LeitorPort = {
     lerTexto: async (a) => (semTexto.has(a.id) ? null : (textos.get(a.id) ?? null)),
@@ -84,6 +87,14 @@ export function montar(c: Cenario) {
           lerComOcr: async (a) => {
             ocrChamadas.push(a.id);
             return c.ocr![a.id] ?? null;
+          },
+        }
+      : {}),
+    ...(c.modelo
+      ? {
+          lerComModelo: async (a) => {
+            modeloChamadas.push(a.id);
+            return c.modelo![a.id] ?? null;
           },
         }
       : {}),
@@ -100,7 +111,7 @@ export function montar(c: Cenario) {
   };
   const pastaPorCnpj = c.pastaPorCnpj ? new Map(Object.entries(c.pastaPorCnpj)) : undefined;
   const regimesManuais = c.regimesManuais ? new Map(Object.entries(c.regimesManuais)) : undefined;
-  return { portas: { planilhas, documentos, leitor, cadastro, pastaPorCnpj, regimesManuais }, enviados, removidos, clientes, ocrChamadas };
+  return { portas: { planilhas, documentos, leitor, cadastro, pastaPorCnpj, regimesManuais }, enviados, removidos, clientes, ocrChamadas, modeloChamadas };
 }
 
 /** Comprovante de Inscrição e de Situação Cadastral (cartão CNPJ), na forma do texto real. */

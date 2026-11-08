@@ -5,7 +5,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ArquivoDocumento, CadastroPort } from "../application/ports/portas";
 
 const BUCKET = "documentos-clientes";
-const LIMITE = 10 * 1024 * 1024; // limite do bucket
+const LIMITE = 20 * 1024 * 1024; // limite do bucket (migration 20261030120000)
 
 const TIPOS: Partial<Record<ArquivoDocumento["formato"], string>> = {
   pdf: "application/pdf",
@@ -46,7 +46,7 @@ export function cadastroSupabase(client: SupabaseClient): CadastroPort {
       const tipo = TIPOS[origem.formato];
       if (!tipo || !origem.caminho) throw new Error(`formato sem suporte no Storage: ${origem.formato}`);
       const bytes = await readFile(origem.caminho);
-      if (bytes.length > LIMITE) throw new Error("arquivo acima de 10 MB");
+      if (bytes.length > LIMITE) throw new Error("arquivo acima de 20 MB");
       // remove + upload (sem `upsert`): o ON CONFLICT do upsert falha no Storage local.
       await client.storage.from(BUCKET).remove([caminho]);
       const { error } = await client.storage.from(BUCKET).upload(caminho, bytes, { contentType: tipo });

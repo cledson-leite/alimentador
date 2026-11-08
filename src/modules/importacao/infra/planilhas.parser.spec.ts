@@ -1,4 +1,4 @@
-import { cnpjsDoSn, linhasDaLista, regimesDoTributario } from "./planilhas.parser";
+import { cnpjsDoSn, empresasForaDaLista, linhasDaLista, regimesDoTributario } from "./planilhas.parser";
 
 describe("interpretação das planilhas", () => {
   it("lê a lista de empresas (nome, CNPJ) e guarda só os dígitos do documento", () => {
@@ -53,5 +53,27 @@ describe("interpretação das planilhas", () => {
         ["44373409000100", "lucro_real"],
       ]),
     );
+  });
+
+  it("empresas só da SN ou do tributário entram com o nome sem anotações; conflito de nome, associação e OUTRAS ENT. ficam fora", () => {
+    const sn = [
+      ["X", "EMPRESA", "CNPJ"],
+      ["a", "ALFA LTDA (SAIU 01/08)", "11.222.333/0001-81"],
+      ["a", "BETA LTDA - BAIXADA 10/26", "55.555.555/0001-55"],
+      ["a", "NA LISTA LTDA", "22.333.444/0001-81"],
+      ["a", "UM NOME", "66.666.666/0001-66"],
+      ["a", "ASSOCIAÇÃO DOS AMIGOS", "77.777.777/0001-77"],
+    ];
+    const trib = [
+      ["33.444.555/0001-81", "GAMA LTDA", "1", "L. REAL"],
+      ["66.666.666/0001-66", "OUTRO NOME", "1", "L. PRESUMIDO"],
+      ["88.888.888/0001-88", "IGREJA", "1", "OUTRAS ENT."],
+    ];
+
+    expect(empresasForaDaLista(sn, trib, new Set(["22333444000181"]))).toEqual([
+      { nome: "ALFA LTDA", cnpj: "11222333000181" },
+      { nome: "BETA LTDA", cnpj: "55555555000155" },
+      { nome: "GAMA LTDA", cnpj: "33444555000181" },
+    ]);
   });
 });

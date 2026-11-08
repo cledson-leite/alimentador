@@ -11,7 +11,7 @@ A planilha que define o universo da carga: nome e CNPJ de cada empresa a importa
 _Avoid_: cadastro de clientes, base de clientes.
 
 **Planilha SN**:
-O "CONTROLE SIMPLES NACIONAL". Só a aba "Patriki 102026" vale: ela é a lista atualizada das empresas ativas no regime `simples_nacional`. As outras abas são histórico. CNPJ que só existe nela e não está na Lista de empresas não é importado.
+O "CONTROLE SIMPLES NACIONAL". Só a aba "Patriki 102026" vale: ela é a lista atualizada das empresas ativas no regime `simples_nacional`. As outras abas são histórico. CNPJ que só existe nela (e não está na Lista de empresas) também é importado, com o nome da planilha.
 _Avoid_: lista de clientes ativos.
 
 **Planilha tributária**:

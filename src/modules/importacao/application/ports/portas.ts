@@ -30,6 +30,11 @@ export interface LeitorPort {
    * sem mapeamento). Opcional: sem ela, esses arquivos seguem como não lidos.
    */
   lerComOcr?(arquivo: ArquivoDocumento): Promise<string | null>;
+  /**
+   * Última tentativa, só para o arquivo que nem o OCR conseguiu ler (devolveu nada): o modelo transcreve o texto, que
+   * passa pelas mesmas regras. Opcional e desligada por padrão: o documento sai da máquina (--permitir-api).
+   */
+  lerComModelo?(arquivo: ArquivoDocumento): Promise<string | null>;
 }
 
 export type NovoCliente = {
