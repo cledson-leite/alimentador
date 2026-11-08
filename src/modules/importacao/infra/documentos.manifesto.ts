@@ -25,7 +25,7 @@ export function pastasDoManifesto(manifesto: EntradaManifesto[], indice: Map<str
     const caminho = indice.get(e.id.slice(0, 6));
     const nome = e.path.split("/").at(-1) ?? e.path;
     const formato = FORMATOS[nome.split(".").at(-1)?.toLowerCase() ?? ""];
-    if (!caminho || !formato || vistos.has(e.id) || /alvara/i.test(semAcento(e.path))) continue;
+    if (!caminho || !formato || vistos.has(e.id) || /alvara|modelos utilizados/i.test(semAcento(e.path))) continue;
     vistos.add(e.id);
     const arquivos = porEmpresa.get(e.empresa) ?? [];
     arquivos.push({ id: e.id, nome, formato, caminho });

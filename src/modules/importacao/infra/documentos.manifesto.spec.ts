@@ -19,11 +19,12 @@ describe("pastasDoManifesto", () => {
     ]);
   });
 
-  it("ignora arquivo ausente do disco, formato desconhecido, alvará e duplicata do mesmo id", () => {
+  it("ignora arquivo ausente do disco, formato desconhecido, alvará, modelos em branco e duplicata do mesmo id", () => {
     const indice = new Map([
       ["AAAAAA", "C:/x/a.pdf"],
       ["BBBBBB", "C:/x/b.xlsx"],
       ["CCCCCC", "C:/x/c.pdf"],
+      ["EEEEEE", "C:/x/e.pdf"],
     ]);
     const manifesto = [
       entrada("EMP", "AAAAAA1", "A/EMP/contrato.pdf"),
@@ -31,6 +32,7 @@ describe("pastasDoManifesto", () => {
       entrada("EMP", "BBBBBB1", "A/EMP/planilha.xlsx"),
       entrada("EMP", "CCCCCC1", "A/EMP/ALVARÁ/alteracao.pdf"),
       entrada("EMP", "DDDDDD1", "A/EMP/removido.pdf"),
+      entrada("EMP", "EEEEEE1", "A/EMP/MODELOS UTILIZADOS/contrato.pdf"),
     ];
 
     const [pasta] = pastasDoManifesto(manifesto, indice);
