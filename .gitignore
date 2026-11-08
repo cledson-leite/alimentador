@@ -147,3 +147,6 @@ vite.config.ts.timestamp-*
 .claude/worktrees/
 .claude/scheduled_tasks.lock
 graphify-out/
+
+# Importador: dados de clientes nunca vao ao git
+saida/

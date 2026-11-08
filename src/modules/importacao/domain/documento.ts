@@ -1,0 +1,193 @@
+const CNPJ = /\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}/g;
+
+export const soDigitos = (s: string) => s.replace(/\D/g, "");
+export const raiz = (cnpj: string) => cnpj.slice(0, 8);
+
+export function cnpjsDoTexto(texto: string): string[] {
+  return [...texto.matchAll(CNPJ)].map((m) => soDigitos(m[0]));
+}
+
+export const semAcento = (s: string) => s.normalize("NFD").replace(/\p{Diacritic}/gu, "");
+
+/** Nome entre aspas no corpo ("NOME LTDA", com sede...), que é como os contratos reais o escrevem. */
+const NOME_ENTRE_ASPAS = /[“"]([^”"\n]{3,120}?\s(?:LTDA|EIRELI|S\/A|S\.A\.|EPP|ME|SS|MEI))\.?[”"]/i;
+
+/** Nome na linha logo após "NOME EMPRESARIAL" no comprovante de CNPJ. */
+export function nomeDoComprovante(texto: string): string | null {
+  const linhas = texto.split("\n").map((l) => l.trim()).filter(Boolean);
+  const i = linhas.findIndex((l) => /^NOME EMPRESARIAL$/i.test(l));
+  return i >= 0 ? (linhas[i + 1] ?? null) : null;
+}
+
+/** "adotará como nome empresarial: X LTDA", quando o contrato abre pela qualificação dos sócios. */
+const NOME_EMPRESARIAL_DECLARADO = /nome empresarial:?\s+([^,\n]+?\s(?:LTDA|EIRELI|S\/A|S\.A\.|EPP|ME|SS|MEI))\b/i;
+/** Linha que é só o nome (termina na forma societária), como logo abaixo do título da alteração. */
+const LINHA_DE_NOME = /^(.{3,120}?\s(?:LTDA|EIRELI|S\/A|S\.A\.|EPP|ME|SS|MEI))\.?$/i;
+/** Empresário individual: nome completo seguido do CPF (11 dígitos), sem forma societária. */
+const NOME_E_CPF = /(?:^|-\s*)([A-ZÀ-Ú][A-ZÀ-Ú ]{5,80}?)\s+\d{11}\b/;
+
+/**
+ * O título fica nas primeiras linhas, mas pode vir atrás do carimbo da Junta ("CERTIFICO O REGISTRO EM...")
+ * e de cabeçalhos de página ("Página 1 de 5"); por isso a busca olha uma janela maior do documento.
+ */
+const JANELA = 60;
+
+/** Linha de título de alteração: "ALTERAÇÃO" no começo (após ordinal), com palavra de contrato na mesma linha. */
+const ORDINAL = "(?:PRIMEIRA|SEGUNDA|TERCEIRA|QUARTA|QUINTA|SEXTA|SETIMA|OITAVA|NONA|DECIMA|VIGESIMA|TRIGESIMA|QUADRAGESIMA|QUINQUAGESIMA)";
+// Antes de "ALTERAÇÃO" só entram ordinais ("OITAVA", "DÉCIMA QUARTA", "2ª") e "INSTRUMENTO DE": qualquer outra palavra
+// ("CONFIRMAÇÃO DE ALTERAÇÃO...", "PEDIDO DE ALTERAÇÃO...") é outro tipo de documento.
+const TITULO_DE_ALTERACAO = new RegExp(
+  `^(?:[#\\d]+\\s*[ªº°A]?\\s*|INSTRUMENTO (?:PARTICULAR )?DE\\s+|${ORDINAL}\\s+){0,4}ALTERACAO\\b` +
+    `(?:\\s+POR\\b|.*(?:CONTRAT|SOCIAL|INSTRUMENTO|INDIVIDUAL|ATOS?\\s+CONSTITUTIVOS?))`,
+);
+/** Linha de título de contrato: começa por "CONTRATO SOCIAL" ou "CONTRATO DE CONSTITUIÇÃO". */
+const TERMO_DE_CONTRATO =
+  "(?:CONTRATOS?\\s+SOCIA(?:L|IS)|(?:CONTRATOS?|ATOS?|INSTRUMENTOS?)\\s+(?:DE\\s+)?CONSTITUICAO|(?:CONTRATOS?|ATOS?)\\s+CONSTITUTIVOS?)";
+const TITULO_DE_CONTRATO = new RegExp(`^(?:[#\\d]+\\s*|PELO PRESENTE INSTRUMENTO (?:PARTICULAR )?DE\\s+)?${TERMO_DE_CONTRATO}\\b`);
+
+/** "ALTERAÇÃO CONTRATUAL", "ALTERAÇÕES CONTRATUAIS", "ALTERAÇÃO DO CONTRATO SOCIAL" (já sem acento e em caixa alta). */
+const FRASE_DE_ALTERACAO = /\bALTERAC(?:AO|OES)\s+(?:(?:DO|DE|DOS|DAS)\s+)?(?:CONTRATUAL|CONTRATUAIS|CONTRATO|ATOS?\s+CONSTITUTIVOS?)\b/;
+
+/** "CONTRATO SOCIAL", "CONTRATOS SOCIAIS", "ATO DE CONSTITUIÇÃO", "ATOS CONSTITUTIVOS"... (sem acento, caixa alta). */
+const FRASE_DE_CONTRATO_SOCIAL = new RegExp(`\\b${TERMO_DE_CONTRATO}\\b`);
+
+type Tipo = "contrato" | "alteracao" | "cnpj" | "outro";
+type Classificacao = { tipo: Tipo; /** índice (nas linhas não vazias) da linha de título, ou -1 */ indice: number; linhas: string[] };
+
+/** O título decide o tipo; a palavra solta no corpo não conta. */
+function classificar(texto: string): Classificacao {
+  const originais = texto.split("\n").map((l) => l.trim()).filter(Boolean);
+  const todas = originais.map((l) => semAcento(l).toUpperCase());
+  const resultado = (tipo: Tipo, indice = -1): Classificacao => ({ tipo, indice, linhas: originais });
+
+  // Comprovante de Inscrição e de Situação Cadastral (cartão CNPJ): prova o CNPJ e traz o nome empresarial.
+  const cabecalho = todas.slice(0, 12).join(" ");
+  if (/COMPROVANTE DE INSCRICAO E DE SITUACAO/.test(cabecalho) && /CADASTRO NACIONAL DA PESSOA JURIDICA/.test(cabecalho)) {
+    return resultado("cnpj");
+  }
+
+  const janela = todas.slice(0, JANELA);
+  // O título pode quebrar em até 3 linhas ("ALTERAÇÃO POR TRANSFORMAÇÃO / DO INSTRUMENTO DE..."), mas a junção só vale
+  // se começar numa linha que abre com ordinal ou "ALTERAÇÃO"; "Evento: Alteração contratual" não é título.
+  // Título nas 3 primeiras linhas vale direto. Mais abaixo (atrás do carimbo da Junta) só vale em instrumento, isto é,
+  // com cláusulas: o protocolo da Junta lista eventos como "ALTERAÇÃO/CONSOLIDAÇÃO DE CONTRATO/ESTATUTO" sem ser um.
+  const temClausulas = /\bCLAUSULAS?\b/.test(todas.join(" "));
+  // O título casa a partir de uma linha, mas o índice guardado é o da linha que tem a palavra "ALTERAÇÃO": uma linha só
+  // com o número da página ("1") pode abrir a junção e não pode ser lida como o número da alteração.
+  const inicioDoTitulo = janela.findIndex((_, i) => TITULO_DE_ALTERACAO.test(todas.slice(i, i + 3).join(" ")));
+  const iAlteracao = inicioDoTitulo < 0 ? -1 : inicioDoTitulo + Math.max(0, todas.slice(inicioDoTitulo, inicioDoTitulo + 3).findIndex((l) => l.includes("ALTERACAO")));
+  // Requerimento da Junta (e a "CAPA DO REQUERIMENTO") é o pacote de protocolo, não o instrumento: o título decide.
+  // Se "CAPA"/"REQUERIMENTO" abre o documento antes de qualquer título de alteração, é requerimento. O nome do arquivo
+  // não conta: "segunda alt REQUERIMENTO..." é alteração quando o conteúdo abre pelo título de alteração.
+  // Procuração e substabelecimento citam "alteração contratual" e trazem cláusulas, mas são mandato, não instrumento.
+  const iRequerimento = todas.slice(0, 3).findIndex((l) => /^(?:CAPA\b|REQUERIMENTO\b|PROCURACAO\b|SUBSTABELECIMENTO\b|CERTIDAO\b)/.test(l));
+  if (iRequerimento >= 0 && (iAlteracao < 0 || iRequerimento <= iAlteracao)) return resultado("outro");
+  if (iAlteracao >= 0 && (iAlteracao < 3 || temClausulas)) return resultado("alteracao", iAlteracao);
+  // CLÁUSULA separa instrumento de verdade de página de portal, e-mail ou manual que só citam "alteração".
+  const topo = todas.slice(0, 8).join(" ");
+  if (/\bCLAUSULA\b/.test(todas.join(" ")) && /MOTIVOS:|CONSOLIDACAO CONTRATUAL|\bALTERACAO\b/.test(topo)) return resultado("alteracao");
+
+  const iContrato = janela.findIndex((l) => TITULO_DE_CONTRATO.test(l));
+  if (iContrato >= 0 && (iContrato < 3 || temClausulas)) return resultado("contrato", iContrato);
+  // Constituição sem título: abre pela qualificação dos sócios e declara a denominação na CLÁUSULA PRIMEIRA.
+  if (/CLAUSULA PRIMEIRA.*(DENOMINACAO EMPRESARIAL|NOME EMPRESARIAL)/.test(topo)) return resultado("contrato");
+  // Toda alteração traz "alteração contratual" ou equivalente no texto (sem acento, plural, "do contrato social").
+  // Mas protocolo da Junta, pedido da Receita e orientação interna também a citam: só é instrumento se tiver cláusulas.
+  const iFrase = todas.findIndex((l) => FRASE_DE_ALTERACAO.test(l));
+  if (iFrase >= 0 && /\bCLAUSULAS?\b/.test(todas.join(" "))) return resultado("alteracao", iFrase);
+  // "Contrato social" (ou só "contrato") fora do título aparece de passagem em muito documento: o conteúdo precisa
+  // confirmar um instrumento societário (cláusulas e capital/quotas/objeto), e contrato de serviços fica de fora.
+  const corpo = todas.join(" ");
+  const confirmaSocietario =
+    /\bCLAUSULA\b/.test(corpo) && /CAPITAL SOCIAL|QUOTAS|SOCIEDADE EMPRESARIA|OBJETO SOCIAL|DENOMINACAO/.test(corpo) && !/PRESTACAO DE SERVICO/.test(janela.join(" "));
+  if (confirmaSocietario) {
+    const iSocial = todas.findIndex((l) => FRASE_DE_CONTRATO_SOCIAL.test(l));
+    const iSimples = janela.findIndex((l) => /^(?:[#\d]+\s*)?CONTRATO\b/.test(l));
+    if (iSocial >= 0 || iSimples >= 0) return resultado("contrato", iSocial >= 0 ? iSocial : iSimples);
+  }
+  return resultado("outro");
+}
+
+export function tipoDoDocumento(texto: string): Tipo {
+  return classificar(texto).tipo;
+}
+
+export function nomeEmpresarial(texto: string): string | null {
+  const entreAspas = texto.match(NOME_ENTRE_ASPAS)?.[1]?.trim();
+  if (entreAspas) return entreAspas;
+  const declarado = texto.match(NOME_EMPRESARIAL_DECLARADO)?.[1]?.trim();
+  if (declarado) return declarado;
+  // Sem aspas, o nome fica perto do título (logo abaixo dele), e não perto do carimbo da Junta.
+  const { indice, linhas } = classificar(texto);
+  const inicio = linhas.slice(Math.max(indice, 0), Math.max(indice, 0) + 6);
+  const eiTitulo = inicio.findIndex((l) => /EMPRES[AÁ]RIO INDIVIDUAL/i.test(l));
+  const abaixoDoTitulo = eiTitulo >= 0 && eiTitulo < 3 ? inicio[eiTitulo + 1] : undefined;
+  if (abaixoDoTitulo && abaixoDoTitulo.length <= 80 && !/\d|CNPJ|NIRE/i.test(abaixoDoTitulo)) return abaixoDoTitulo;
+  const naLinha = inicio.map((l) => (/ALTERA|CONTRAT|CONSOLIDA/i.test(l) ? null : l.match(LINHA_DE_NOME)?.[1])).find(Boolean);
+  if (naLinha) return naLinha.trim();
+  if (/EMPRES[AÁ]RI[OA]/i.test(inicio.slice(0, 4).join(" "))) {
+    return inicio.slice(0, 4).map((l) => l.match(NOME_E_CPF)?.[1]).find(Boolean)?.trim() ?? null;
+  }
+  return null;
+}
+
+const UNIDADES: Record<string, number> = {
+  PRIMEIRA: 1, SEGUNDA: 2, TERCEIRA: 3, QUARTA: 4, QUINTA: 5, SEXTA: 6, SETIMA: 7, OITAVA: 8, NONA: 9,
+};
+const DEZENAS: Record<string, number> = {
+  DECIMA: 10, VIGESIMA: 20, TRIGESIMA: 30, QUADRAGESIMA: 40, QUINQUAGESIMA: 50,
+};
+
+/** Número da alteração na linha do título ("3ª", "SEGUNDA", "DÉCIMA PRIMEIRA"); null se não houver. */
+export function numeroDoConteudo(texto: string): number | null {
+  const { indice, linhas } = classificar(texto);
+  const titulo = semAcento(indice >= 0 ? linhas[indice]! : linhas.slice(0, 3).join(" ")).toUpperCase();
+  const antes = titulo.split("ALTERACAO")[0] ?? "";
+  const digitos = antes.match(/(\d+)\s*[ªº°A]?\s*$/);
+  if (digitos) return Number(digitos[1]);
+  const total = antes
+    .split(/\s+/)
+    .reduce((s, w) => s + (UNIDADES[w] ?? 0) + (DEZENAS[w] ?? 0), 0);
+  return total > 0 ? total : null;
+}
+
+/** "0 ALTERAÇÃO..." : o 0 é a ordem de arquivamento do escritório e marca o documento-base (ex.: transformação em sociedade). */
+export const ehDocumentoBase = (nomeArquivo: string) => Number(nomeArquivo.match(/\d+/)?.[0]) === 0;
+
+/**
+ * Número no começo do nome ("2 PRIMEIRA ALTERAÇÃO...", "02_Alteracao..."): é a sequência de arquivamento do escritório,
+ * única na pasta. O ordinal do título recomeça a cada transformação societária e por isso colide. Zero não conta.
+ */
+export function numeroInicialDoNome(nomeArquivo: string): number | null {
+  const m = nomeArquivo.match(/^\s*(\d{1,3})(?=[\s._)ºª-])/);
+  return m && Number(m[1]) > 0 ? Number(m[1]) : null;
+}
+
+export function numeroDoNome(nomeArquivo: string): number | null {
+  const m = nomeArquivo.match(/(?<!\d)\d{1,3}(?!\d)/); // protocolos e carimbos de hora (muitos dígitos) não são número de alteração
+  // "0 ALTERAÇÃO..." é só a ordem de arquivamento do escritório, não número de alteração (o banco exige número > 0):
+  // vale como sem número, ou seja, 1.
+  return m && Number(m[0]) > 0 ? Number(m[0]) : null;
+}
+
+const MESES = ["janeiro", "fevereiro", "marco", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+/**
+ * Linha inteira de data: "Cascavel/PR, 20 de fevereiro de 2026." (UF com barra, hífen, parênteses, ponto ou
+ * ausente), ou só "20 de fevereiro de 2026.". Só vale a linha que termina na data; mês no meio de frase não conta.
+ */
+const LINHA_DATA = new RegExp(`^(?:[^\\d]{2,160}?\\s*)?(\\d{1,2})\\s*[º°o]?\\s+de\\s+(${MESES.join("|")})\\s+de\\s+(\\d{4})[\\s.\\-–—]*$`, "i");
+
+/**
+ * A data da alteração é a última linha de data do documento: depois dela só vêm o bloco de assinaturas
+ * dos sócios e o carimbo da Junta, que não têm esse formato. Devolve no máximo uma data (ISO).
+ */
+export function datasFinais(texto: string): string[] {
+  const linhas = texto.split("\n").map((l) => semAcento(l.trim())).filter(Boolean);
+  // A data pode vir quebrada em duas linhas ("Cascavel/PR, 20" / "de fevereiro de 2026."): testa a linha e a junção
+  // com a anterior, de baixo para cima.
+  for (let i = linhas.length - 1; i >= 0; i--) {
+    const m = linhas[i]!.match(LINHA_DATA) ?? (i > 0 ? `${linhas[i - 1]} ${linhas[i]}`.match(LINHA_DATA) : null);
+    if (m) return [`${m[3]}-${String(MESES.indexOf(m[2]!.toLowerCase()) + 1).padStart(2, "0")}-${m[1]!.padStart(2, "0")}`];
+  }
+  return [];
+}
