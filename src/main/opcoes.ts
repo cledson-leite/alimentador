@@ -9,6 +9,7 @@ export type Opcoes = {
   regimes: string;
   ocrCache: string;
   cnpjs: string[] | undefined;
+  datasManuais: Map<string, string>;
   lista: string;
   sn: string;
   tributario: string;
@@ -30,6 +31,7 @@ export function lerOpcoes(argv: string[]): Opcoes {
       regimes: { type: "string", default: "saida/sem-regime-prontas-para-confirmar.csv" },
       "ocr-cache": { type: "string", default: "C:/dados/ocr-cache" },
       cnpj: { type: "string" },
+      "data-alteracao": { type: "string", multiple: true },
       lista: { type: "string", default: `${DOWNLOADS}/lista empresas(4).xlsx` },
       sn: { type: "string", default: `${DOWNLOADS}/CONTROLE SIMPLES NACIONAL .xlsx` },
       tributario: { type: "string", default: `${DOWNLOADS}/TRIBUTARIO EMPRESAS.xlsx` },
@@ -41,6 +43,12 @@ export function lerOpcoes(argv: string[]): Opcoes {
   if (!Number.isInteger(Number(values["max-api"])) || Number(values["max-api"]) < 0) throw new Error("--max-api aceita um inteiro maior ou igual a zero.");
   const cnpjs = values.cnpj?.split(",").map((c) => c.replace(/\D/g, ""));
   if (cnpjs?.some((c) => c.length !== 14)) throw new Error("--cnpj aceita só CNPJs de 14 dígitos, separados por vírgula.");
+  const datasManuais = new Map<string, string>();
+  for (const v of values["data-alteracao"] ?? []) {
+    const m = v.match(/^(\d{14})=(\d{4}-\d{2}-\d{2})$/);
+    if (!m) throw new Error("--data-alteracao aceita CNPJ=AAAA-MM-DD (14 dígitos).");
+    datasManuais.set(m[1]!, m[2]!);
+  }
   return {
     dryRun: values["dry-run"],
     producao: values.producao,
@@ -50,6 +58,7 @@ export function lerOpcoes(argv: string[]): Opcoes {
     regimes: values.regimes,
     ocrCache: values["ocr-cache"],
     cnpjs,
+    datasManuais,
     lista: values.lista,
     sn: values.sn,
     tributario: values.tributario,

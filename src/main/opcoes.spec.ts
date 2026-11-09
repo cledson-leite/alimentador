@@ -34,3 +34,10 @@ describe("lerOpcoes", () => {
     expect(() => lerOpcoes(["--cnpj", "abc"])).toThrow(/CNPJ/);
   });
 });
+
+describe("lerOpcoes --data-alteracao", () => {
+  it("lê CNPJ=data e recusa formato inválido", () => {
+    expect(lerOpcoes(["--data-alteracao", "12992571000139=2020-11-13"]).datasManuais.get("12992571000139")).toBe("2020-11-13");
+    expect(() => lerOpcoes(["--data-alteracao", "123=13/11/2020"])).toThrow();
+  });
+});

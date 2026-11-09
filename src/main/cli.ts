@@ -72,6 +72,7 @@ async function principal() {
       cadastro,
       pastaPorCnpj: lerPastaPorCnpj(`${op.documentos}/_estado-final.csv`),
       regimesManuais,
+      datasManuais: op.datasManuais,
     },
     { cnpjs: op.cnpjs },
   );

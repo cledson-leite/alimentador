@@ -27,6 +27,8 @@ export type Portas = {
   pastaPorCnpj?: Map<string, string>;
   /** Regime informado à mão para empresas sem regime nas planilhas (CNPJ → regime). Opcional. */
   regimesManuais?: Map<string, Regime>;
+  /** Data (ISO) da alteração informada à mão (CNPJ → data), usada só quando o texto não traz uma data única. Opcional. */
+  datasManuais?: Map<string, string>;
 };
 
 export type Falha = { cnpj: string; nome: string; etapa: string; motivo: string };
@@ -204,7 +206,7 @@ async function carregar(
   const todasAlteracoes = lidos.filter((l) => l.tipo === "alteracao");
   const base = (l: Lido) => numeroDoConteudo(l.texto) === null && ehDocumentoBase(l.arquivo.nome);
   const bases = todasAlteracoes.some((l) => !base(l)) ? todasAlteracoes.filter(base) : [];
-  const alteracoes = numerar(todasAlteracoes.filter((l) => !bases.includes(l)));
+  const alteracoes = numerar(todasAlteracoes.filter((l) => !bases.includes(l)), portas.datasManuais?.get(cnpj));
 
   const id = randomUUID();
   const enviados: string[] = [];
@@ -240,9 +242,10 @@ async function carregar(
   return empresa;
 }
 
-function numerar(alteracoes: Lido[]) {
+function numerar(alteracoes: Lido[], dataManual?: string) {
   const datados = alteracoes.map((lido) => {
     const datas = datasFinais(lido.texto);
+    if (datas.length !== 1 && dataManual) datas[0] = dataManual;
     if (datas.length !== 1) throw new FalhaDeEmpresa("data", "data da alteração ausente ou ambígua");
     if (datas[0]! > hoje()) throw new FalhaDeEmpresa("data", "data da alteração no futuro");
     return { lido, data: datas[0]!, numero: numeroInicialDoNome(lido.arquivo.nome) ?? numeroDoConteudo(lido.texto) ?? numeroDoNome(lido.arquivo.nome) };
