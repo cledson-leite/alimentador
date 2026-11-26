@@ -5,7 +5,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
-    "importar": "tsx src/main/cli.ts"
+    "importar": "tsx src/main/cli.ts",
+    "contatos": "tsx src/main/contatos-cli.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.6.0",
